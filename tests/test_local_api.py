@@ -197,7 +197,7 @@ def test_email_action_payload_rejects_multiple_recipients_and_header_injection()
     try:
         validate_google_action_payload("email_send", {
             "to": "person@example.test",
-            "subject": "Hello\\nBcc: other@example.test",
+            "subject": "Hello\nBcc: other@example.test",
             "body": "A test message",
         })
         assert False, "Header injection should be rejected."
