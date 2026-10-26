@@ -1,14 +1,15 @@
 """Local-only job-fit review; it never submits an application."""
 from __future__ import annotations
 from urllib.parse import urlparse
+import os
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from backend.security import require_api_token
 
 router = APIRouter()
-OLLAMA_URL = "http://127.0.0.1:11434"
-MODEL = "qwen3.5:4b"
+OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
+MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:4b")
 
 class JobEvaluation(BaseModel):
     title: str = Field(min_length=2, max_length=160)
