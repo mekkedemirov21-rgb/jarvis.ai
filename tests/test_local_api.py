@@ -203,3 +203,31 @@ def test_email_action_payload_rejects_multiple_recipients_and_header_injection()
         assert False, "Header injection should be rejected."
     except HTTPException as exc:
         assert exc.status_code == 422
+
+
+def test_chat_memory_retrieval_includes_only_relevant_local_notes() -> None:
+    from backend.main import retrieve_memory_context, VAULT_DIR
+
+    VAULT_DIR.mkdir(parents=True, exist_ok=True)
+    relevant = VAULT_DIR / "memory-retrieval-test-relevant.md"
+    irrelevant = VAULT_DIR / "memory-retrieval-test-irrelevant.md"
+    relevant.write_text(
+        '---\\ntitle: Bewerbungsprofil Python\\ntags: ["jobs"]\\n---\\n'
+        'Ich suche Python-Entwicklerstellen in Karlsruhe und bevorzuge hybrides Arbeiten.\\n',
+        encoding="utf-8",
+    )
+    irrelevant.write_text(
+        '---\\ntitle: Lieblingsrezepte\\ntags: ["essen"]\\n---\\n'
+        'Mein Lieblingsgericht ist Linsensuppe mit Zitrone.\\n',
+        encoding="utf-8",
+    )
+    try:
+        context = retrieve_memory_context([
+            {"role": "user", "content": "Finde passende Python-Entwicklerstellen in Karlsruhe mit hybridem Arbeiten."}
+        ])
+        assert "Bewerbungsprofil Python" in context
+        assert "Karlsruhe" in context
+        assert "Lieblingsrezepte" not in context
+    finally:
+        relevant.unlink(missing_ok=True)
+        irrelevant.unlink(missing_ok=True)
