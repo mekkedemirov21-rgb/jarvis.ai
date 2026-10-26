@@ -1,6 +1,6 @@
 """Local-only job-fit review; it never submits an application."""
 from __future__ import annotations
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlencode
 import os
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -58,3 +58,66 @@ async def evaluate_job(request: JobEvaluation) -> dict:
         raise HTTPException(502, "Local model returned an error.") from exc
     except (ValueError, KeyError, TypeError) as exc:
         raise HTTPException(502, "Unexpected response from local model.") from exc
+
+
+@router.get("/api/jobs/search", dependencies=[Depends(require_api_token)])
+async def search_jobs(q: str, location: str = "Deutschland", page: int = 1, results_per_page: int = 20) -> dict:
+    """Search Adzuna when the user configured their free personal-search API key; never scrape job boards."""
+    from fastapi import Query
+    # Bound all provider-controlled query parameters.
+    q = q.strip()[:120]
+    location = location.strip()[:100] or "Deutschland"
+    page = max(1, min(page, 5))
+    results_per_page = max(5, min(results_per_page, 20))
+    if len(q) < 2:
+        raise HTTPException(422, "Search query must contain at least two characters.")
+    app_id = os.getenv("ADZUNA_APP_ID", "").strip()
+    app_key = os.getenv("ADZUNA_APP_KEY", "").strip()
+    search_links = [
+        {"name": "Indeed", "url": "https://de.indeed.com/jobs?" + urlencode({"q": q, "l": location})},
+        {"name": "Bundesagentur für Arbeit", "url": "https://www.arbeitsagentur.de/jobsuche/suche?" + urlencode({"was": q, "wo": location})},
+        {"name": "LinkedIn Jobs", "url": "https://www.linkedin.com/jobs/search/?" + urlencode({"keywords": q, "location": location})},
+    ]
+    if not app_id or not app_key:
+        return {"configured": False, "results": [], "searchLinks": search_links,
+                "note": "Configure ADZUNA_APP_ID and ADZUNA_APP_KEY locally for programmatic search. No credentials are stored in the repository."}
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=4.0), follow_redirects=False) as client:
+            response = await client.get(
+                f"https://api.adzuna.com/v1/api/jobs/de/search/{page}",
+                params={"app_id": app_id, "app_key": app_key, "what": q,
+                        "where": location, "results_per_page": results_per_page,
+                        "content-type": "application/json"},
+                headers={"Accept": "application/json"},
+            )
+            response.raise_for_status()
+            raw = response.json()
+        rows = []
+        for item in raw.get("results", []):
+            company = item.get("company") or {}
+            place = item.get("location") or {}
+            rows.append({
+                "id": str(item.get("id", "")),
+                "title": str(item.get("title", ""))[:300],
+                "employer": str(company.get("display_name", "Unbekannt"))[:200],
+                "location": str(place.get("display_name", location))[:200],
+                "created": item.get("created", ""),
+                "url": item.get("redirect_url", ""),
+                "description": str(item.get("description", ""))[:7000],
+                "salaryMin": item.get("salary_min"),
+                "salaryMax": item.get("salary_max"),
+                "contractType": item.get("contract_type", ""),
+                "source": "Adzuna",
+            })
+        return {"configured": True, "count": len(rows), "results": rows,
+                "page": page, "searchLinks": search_links, "stored": False,
+                "note": "Listings are third-party data; confirm details and terms at the source before applying."}
+    except httpx.TimeoutException as exc:
+        raise HTTPException(504, "The job search provider timed out.") from exc
+    except httpx.HTTPStatusError as exc:
+        # Avoid reflecting the provider URL because it contains app_id/app_key query parameters.
+        if exc.response.status_code in (401, 403):
+            raise HTTPException(502, "Adzuna rejected the local API credentials. Check them in your ignored .env file.") from exc
+        raise HTTPException(502, "Adzuna could not return job listings.") from exc
+    except (httpx.RequestError, ValueError, TypeError) as exc:
+        raise HTTPException(502, "Could not retrieve job listings from Adzuna.") from exc
