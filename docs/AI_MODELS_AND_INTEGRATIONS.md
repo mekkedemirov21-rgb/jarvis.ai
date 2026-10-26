@@ -52,7 +52,7 @@ Wenn du ein OpenAI-Modell über den OpenAI-API-Dienst einbinden willst: ChatGPT-
 
 ## 3. E-Mail und Kalender
 
-Der aktuelle Google-Connector nutzt offizielle OAuth-Scopes mit Leserechten: `gmail.readonly` und `calendar.events.readonly`. Die lokale KI kann neue E-Mail-Snippets als mögliche Zusage, Absage, Interview oder Bewerbungsupdate klassifizieren. Ein optionaler Monitor kann Hinweise in einer lokalen verschlüsselten Datenbank speichern; Android zeigt generische Benachrichtigungen an, damit Betreff/Absender nicht auf dem Sperrbildschirm landen.
+Der aktuelle Google-Connector ist standardmäßig read-only: `gmail.readonly` und `calendar.events.readonly`. Die lokale KI klassifiziert neue E-Mail-Snippets als mögliche Zusage, Absage, Interview oder Bewerbungsupdate; ein optionaler Monitor speichert verschlüsselte Hinweise und Android zeigt neutrale Benachrichtigungen. Für bewusst aktivierte Schreibaktionen kann `JARVIS_ENABLE_GOOGLE_WRITES=true` zusätzlich `gmail.compose` und `calendar.events` anfordern. Danach ist eine neue Google-OAuth-Freigabe erforderlich. Unterstützt werden Gmail-Entwürfe, E-Mail-Versand sowie Kalendertermine erstellen/aktualisieren — aber nur über einen verschlüsselten Vorschlag, sichtbare Inhaltsprüfung, Freigabe und einen separaten Ausführen-Klick innerhalb von 15 Minuten. Send/Delete/accept/reject actions are not triggered from email classification; automatic email deletion, offer acceptance/rejection, and application submission are not implemented. Gmail write scopes may require app verification for public distribution.
 
 Noch nicht als aktive Funktion behaupten:
 - Gmail senden, Entwürfe schreiben oder Nachrichten löschen/archivieren
@@ -69,6 +69,14 @@ Diese Aktionen brauchen passende OAuth-Rechte, ein separates Aktionsmodul, Rück
 - **Bundesagentur für Arbeit und LinkedIn:** werden aktuell über normale Suchlinks angeboten; es wird keine inoffizielle API-Zugriffserlaubnis behauptet.
 - **Matching:** optionale Suchprofile werden verschlüsselt lokal gespeichert. Der lokale LLM bewertet Treffer, erklärt Gründe und Lücken und erzeugt Hinweise für eine Bewerbung. Die Bewertung ist nur Entscheidungshilfe und kann irren.
 - **Bewerbung:** vor einem späteren Absendemodul müssen Zielunternehmen, Stellenlink, genaue Antworten, Lebenslaufdatei und Anschreiben vollständig angezeigt werden; erst nach frischer Bestätigung darf ein genehmigter, unterstützter Übermittlungsweg verwendet werden. Keine Massenbewerbungen, keine Umgehung von Captchas oder Identitätsprüfungen.
+
+## Google writes: exact activation path
+
+1. Keep `JARVIS_ENABLE_GOOGLE_WRITES=false` for the normal read-only setup.
+2. Only if you knowingly want JARVIS to create drafts/send messages and create/update calendar events, set `JARVIS_ENABLE_GOOGLE_WRITES=true` in the local, untracked `.env` and restart the companion.
+3. Disconnect/re-authorize Google, grant the newly requested scopes, and review Google consent. Gmail compose/send is a restricted scope and may require verification if this is distributed outside personal testing.
+4. In the Freigaben tab, create a proposed action and inspect the complete recipient/text or event fields. Approving records the first confirmation; then use the separate execution button for the second confirmation. The action expires after 15 minutes. JARVIS does not automatically retry an attempt with an uncertain remote result.
+5. E-mail delete/trash, auto-accepting or declining an offer, and job application submission are intentionally unavailable. The model cannot invoke any action by itself.
 
 ## 5. WhatsApp und Beziehungen
 
