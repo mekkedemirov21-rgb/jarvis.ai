@@ -9,9 +9,9 @@ JARVIS is a privacy-oriented personal assistant with an Android client and a loc
 - **Gmail and Google Calendar:** optional official OAuth connector with read-only scopes; reads recent email metadata/snippets and upcoming events. Optional background mail triage can notify about a likely job offer, rejection, interview, or application update.
 - **Job search:** optional Adzuna personal-search API (free/evaluation tier subject to provider limits/terms) plus normal links to Indeed, Bundesagentur für Arbeit, and LinkedIn. Job matching runs against a locally stored encrypted profile and local LLM.
 - **Application preparation:** evaluates fit and missing qualifications. Automatic application submission is not implemented; Indeed is not scraped and its site is not automated.
-- **Memory:** portable Markdown notes compatible with Obsidian.
+- **Memory:** portable Obsidian-compatible Markdown notes. JARVIS retrieves up to three lexically relevant local excerpts into each chat context; it does not send the whole vault. The Markdown files are plaintext, so host full-disk encryption is required.
 - **Relationship support:** encrypted reminders and user-written notes. No covert access to private WhatsApp chats.
-- **Approval queue:** encrypted proposed action payloads and review states. Approving a queue item currently records your decision; it does not send an email, change a calendar, or submit an application.
+- **Approval queue:** encrypted proposed actions with separate proposal, approval and execution steps. Gmail draft/send and Google Calendar create/update can be executed only when `JARVIS_ENABLE_GOOGLE_WRITES=true` is explicitly set and Google is re-authorized with the added scopes. Every action must be inspected, approved and then separately executed within 15 minutes. Job applications, mail deletion, automatic offer acceptance/rejection and WhatsApp personal messages remain manual/not implemented.
 
 For detailed model comparisons, setup choices, providers and the current feature boundary, read [AI Models and Integrations](docs/AI_MODELS_AND_INTEGRATIONS.md), [Architecture](docs/ARCHITECTURE.md), [Product Specification](docs/PRODUCT_SPEC.md), and [Security](docs/SECURITY.md).
 
@@ -58,7 +58,7 @@ Android periodic work checks queued alerts every 15-minute-or-longer interval an
 3. For same-computer local use, register `http://127.0.0.1:8765/oauth/google/callback`. For Android via private HTTPS, set `GOOGLE_REDIRECT_URI` to the exact HTTPS companion URL plus `/oauth/google/callback` and register that same URI in Google Cloud.
 4. Save client JSON to `.secrets/google-oauth-client.json` (ignored by Git), restart the companion, and authorize from the dashboard.
 
-The scopes are read-only: `gmail.readonly` and `calendar.events.readonly`. Google may require app verification for public distribution. Email monitoring is disabled by default. To opt in on your own PC set `JARVIS_ENABLE_EMAIL_MONITOR=true` and restart the companion. The first monitoring run establishes a baseline rather than notifying about old mail.
+By default, the scopes are read-only: `gmail.readonly` and `calendar.events.readonly`. Google writes are opt-in: setting `JARVIS_ENABLE_GOOGLE_WRITES=true` additionally requests `gmail.compose` (draft/send) and `calendar.events` (create/update). Restart JARVIS, disconnect the old local token and reconnect Google to grant the new scopes. These Gmail scopes are restricted and Google may require app verification; keep this in personal testing until OAuth review is addressed. Email monitoring is disabled by default. To opt in on your own PC set `JARVIS_ENABLE_EMAIL_MONITOR=true` and restart the companion. The first monitoring run establishes a baseline rather than notifying about old mail.
 
 ### Optional job monitoring
 
@@ -72,7 +72,7 @@ Register for an Adzuna developer key and set `ADZUNA_APP_ID` and `ADZUNA_APP_KEY
 - The server and local model must stay private. The model sees input in plaintext because it must process it.
 - There is no formal E2E encryption of model prompts from a server that processes them. HTTPS protects transport; at-rest encryption protects only the specified files/records.
 - No product can guarantee zero vulnerabilities. Keep software patched and run tests before releasing.
-- Do not automatically delete acceptance/rejection mail, accept offers, send messages, change events, or submit applications. These writes are not implemented yet and require an explicit approval workflow.
+- Supported Google writes (Gmail draft/send and Calendar create/update) require `JARVIS_ENABLE_GOOGLE_WRITES=true`, fresh OAuth consent, exact payload review, approval and a second explicit execution confirmation. An attempted or uncertain remote operation is never retried automatically. Mail deletion, automatic offer acceptance/rejection, application submission and private WhatsApp messaging are not implemented.
 - WhatsApp personal chat history is not available through a general official consumer API. JARVIS only supports user-managed relationship reminders and notes.
 
 ## Validation
