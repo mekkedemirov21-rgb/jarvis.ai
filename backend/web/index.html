@@ -28,7 +28,46 @@
 <article class="card"><h2>Beziehung & persönliche Erinnerungen</h2><p class="sub">Lege bewusst selbst Erinnerungen an Jahrestage, Verabredungen, wichtige Gespräche oder Dinge an, die du nicht vergessen willst. Titel und Notiz werden mit AES-256-GCM verschlüsselt in der lokalen Datenbank gespeichert.</p><form id="reminderform"><label for="remindertitle">Erinnerung</label><input id="remindertitle" required maxlength="160" placeholder="z. B. Jahrestag, Gespräch nachfragen"><label for="remindertime">Datum und Uhrzeit</label><input id="remindertime" type="datetime-local" required><label for="remindernotes">Private Notiz (optional)</label><textarea id="remindernotes" maxlength="3000" placeholder="Nur das, was du selbst festhalten möchtest."></textarea><button style="margin-top:10px">Erinnerung verschlüsselt speichern</button></form><p id="remindernotice" class="sub"></p></article>
 <article class="card"><div class="row" style="justify-content:space-between"><div><h2>Geplante Erinnerungen</h2><p class="sub">Browser-Benachrichtigungen funktionieren nur während das lokale Dashboard geöffnet bleibt und Berechtigungen erteilt sind.</p></div><button id="reminderrefresh">Aktualisieren</button></div><div id="reminderitems" class="empty">Verbinde dich lokal und lade deine Erinnerungen.</div></article>
 </div><article class="card" style="margin-top:14px"><h2>WhatsApp und Privatsphäre</h2><p class="sub">JARVIS greift nicht heimlich auf private WhatsApp-Chats zu. Die sichere Variante ist: du hältst persönliche Erinnerungen und Gesprächsziele bewusst fest; JARVIS hilft dir beim Nachdenken oder Formulieren. Für private WhatsApp-Messenger-Nachrichten gibt es keine allgemeine offizielle API für einen Drittanbieter-Assistenten. Senden bleibt deine bewusste Aktion.</p></article></section>
-<section class="pane" id="approvals"><article class="card"><div class="row" style="justify-content:space-between"><div><h2>Freigabe-Warteschlange</h2><p class="sub">Freigaben protokollieren aktuell nur deine Entscheidung. Sie versenden oder ändern noch nichts.</p></div><button id="approvalrefresh">Aktualisieren</button></div><div id="approvalitems" class="empty">Keine Freigaben geladen.</div></article></section>
+<section class="pane" id="approvals">
+<article class="card">
+  <h2>Aktion zur Prüfung vorbereiten</h2>
+  <p class="sub">JARVIS führt nichts allein aus. Du erstellst zuerst einen konkreten Entwurf, prüfst die vollständigen Daten, genehmigst ihn und musst danach separat auf „Jetzt ausführen“ klicken. Gmail/Kalender-Schreibzugriff ist standardmäßig deaktiviert.</p>
+  <form id="actionform">
+    <label for="actiontype">Aktion</label>
+    <select id="actiontype">
+      <option value="email_draft">E-Mail-Entwurf in Gmail erstellen</option>
+      <option value="email_send">E-Mail sofort senden (zweifache Bestätigung)</option>
+      <option value="calendar_create">Kalendertermin erstellen</option>
+      <option value="calendar_update">Kalendertermin aktualisieren</option>
+    </select>
+    <div id="emailfields" class="stack">
+      <div><label for="actionto">Empfänger (genau eine Adresse)</label><input id="actionto" type="email" maxlength="254" placeholder="name@beispiel.de"></div>
+      <div><label for="actionsubject">Betreff</label><input id="actionsubject" maxlength="200" placeholder="Betreff der E-Mail"></div>
+      <div><label for="actionbody">Vollständiger Nachrichtentext</label><textarea id="actionbody" maxlength="20000" placeholder="Der genaue Inhalt, der als Entwurf gespeichert oder gesendet wird."></textarea></div>
+    </div>
+    <div id="calendarfields" class="stack">
+      <div id="eventidwrap"><label for="actioneventid">Kalender-Event-ID (nur beim Aktualisieren)</label><input id="actioneventid" maxlength="256" placeholder="Event-ID des bestehenden Termins"></div>
+      <div><label for="actionsummary">Titel des Termins</label><input id="actionsummary" maxlength="250" placeholder="z. B. Vorstellungsgespräch"></div>
+      <div class="twocol">
+        <div><label for="actionstart">Beginn</label><input id="actionstart" type="datetime-local"></div>
+        <div><label for="actionend">Ende</label><input id="actionend" type="datetime-local"></div>
+      </div>
+      <div><label for="actionlocation">Ort oder Videolink</label><input id="actionlocation" maxlength="500" placeholder="Optional"></div>
+      <div><label for="actiondescription">Beschreibung</label><textarea id="actiondescription" maxlength="10000" placeholder="Optional"></textarea></div>
+    </div>
+    <p id="actionhint" class="sub warn">Senden ist endgültig. Der genaue Inhalt wird vor der Freigabe angezeigt; auch die Ausführung braucht danach eine zweite, separate Bestätigung.</p>
+    <button type="submit">Vorschlag verschlüsselt speichern</button>
+    <div id="actionnotice" class="sub"></div>
+  </form>
+</article>
+<article class="card" style="margin-top:14px">
+  <div class="row" style="justify-content:space-between">
+    <div><h2>Freigabe-Warteschlange</h2><p class="sub">Freigabe und Ausführung sind getrennte Schritte. Ausführbare Google-Aktionen verfallen 15 Minuten nach der Freigabe.</p></div>
+    <button id="approvalrefresh" type="button">Aktualisieren</button>
+  </div>
+  <div id="approvalitems" class="empty">Keine Freigaben geladen.</div>
+</article>
+</section>
 <footer class="foot"><span>JARVIS · LOCAL-FIRST · DEVELOPMENT BUILD</span><span>Kein Schutz kann „null Sicherheitslücken“ garantieren. E-Mail/Kalender aktuell nur nach explizitem OAuth. Keine privaten WhatsApp-Chats.</span></footer>
 </main>
 <script>
