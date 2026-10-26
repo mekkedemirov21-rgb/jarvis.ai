@@ -564,7 +564,7 @@ class MainActivity : Activity() {
         if (textToSpeech != null) return
         textToSpeech = TextToSpeech(this) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                textToSpeech?.language = Locale.GERMANY
+                textToSpeech?.setLanguage(Locale.GERMANY)
                 textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {}
                     override fun onDone(utteranceId: String?) {
