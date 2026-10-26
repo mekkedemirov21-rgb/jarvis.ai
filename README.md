@@ -31,25 +31,24 @@ LM Studio is another supported local provider. Configure `JARVIS_LLM_PROVIDER=lm
 
 Requirements: Python 3.11+, either Ollama or LM Studio, and a model downloaded locally.
 
-1. Copy `.env.example` to `.env` in the repository root.
-2. Generate a local API token: `python -c "import secrets; print(secrets.token_urlsafe(48))"`. Set `JARVIS_API_TOKEN`.
-3. Generate a separate local AES-256 key: `python -c "import base64,secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"`. Set `JARVIS_DATA_KEY`.
-4. Replace the placeholders in `.env`. Never commit this file or the OAuth client secret.
-5. Install dependencies: `python -m pip install -r backend/requirements.txt`.
-6. Keep the selected local model server bound to loopback.
-7. Start from the repository root: `python -m uvicorn backend.main:app --host 127.0.0.1 --port 8765`.
-8. Open `http://127.0.0.1:8765/` on the same computer and enter the local API token.
+### Windows (PowerShell)
 
-The API token is not saved in browser storage. The API is designed for loopback-only access; do not bind it to `0.0.0.0` or port-forward it.
+1. Install Python 3.11+ and Ollama.
+2. From the repository root run `Set-ExecutionPolicy -Scope Process Bypass` if PowerShell blocks local scripts, then `.`\\scripts\\setup-windows.ps1`.
+3. Download the model once: `ollama pull qwen3.5:4b`.
+4. Start JARVIS with `.`\\scripts\\start-windows.ps1` and open `http://127.0.0.1:8765/`.
 
-## Connect Android to the private companion
+### macOS / Linux
 
-1. Run the companion on the PC with the command above.
-2. Put both PC and Android phone on a private VPN such as Tailscale. On the PC, use `tailscale serve 8765` to expose the local port **only inside your private tailnet** over HTTPS. Do not use Tailscale Funnel or a public reverse proxy for this privacy-first deployment.
-3. Install the APK from a successful [Build JARVIS APK workflow](https://github.com/mekkedemirov21-rgb/jarvis.ai/actions/workflows/build-apk.yml) run (Artifact: `JARVIS-debug-APK`).
-4. In JARVIS, enter the HTTPS address provided by Tailscale Serve and the local `JARVIS_API_TOKEN`. The token is stored encrypted with Android Keystore. Grant notification permission if prompted.
+```bash
+bash scripts/setup-local.sh
+ollama pull qwen3.5:4b
+bash scripts/start-local.sh
+```
 
-Android periodic work checks queued alerts every 15-minute-or-longer interval and Android may delay background work to save battery. This is not a guaranteed real-time push service. The PC/companion must be running, the phone must reach it over the private VPN, and the corresponding monitoring settings must be enabled.
+The setup script creates a Python virtual environment and, if missing, a local `.env` with fresh random API and encryption keys. It does not overwrite an existing `.env`. Open `http://127.0.0.1:8765/` on the same computer and enter `JARVIS_API_TOKEN`.
+
+The API token is not saved in browser storage. The API and local model server must remain loopback-only. Do not bind them to `0.0.0.0` or port-forward them.
 
 ### Optional Google Mail and Calendar
 
