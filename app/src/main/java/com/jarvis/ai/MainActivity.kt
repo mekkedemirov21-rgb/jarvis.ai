@@ -1,6 +1,11 @@
 package com.jarvis.ai
 
 import android.Manifest
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
@@ -11,6 +16,8 @@ import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.webkit.SafeBrowsingResponse
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -21,22 +28,40 @@ import android.text.InputType
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import org.json.JSONArray
 import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.Locale
 
 /** Android client for the user's self-hosted JARVIS companion. */
 class MainActivity : Activity() {
     private var webView: WebView? = null
     private var baseUrl = ""
     private val prefs by lazy { getSharedPreferences("jarvis_connection", MODE_PRIVATE) }
+    private val cloudPrefs by lazy { getSharedPreferences("jarvis_ollama_cloud", MODE_PRIVATE) }
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val cloudMessages = mutableListOf<JSONObject>()
+    private var cloudTranscript: TextView? = null
+    private var cloudScroll: ScrollView? = null
+    private var cloudInput: EditText? = null
+    private var cloudStatus: TextView? = null
+    private var modelInput: EditText? = null
+    private var speechRecognizer: SpeechRecognizer? = null
+    private var textToSpeech: TextToSpeech? = null
+    private var wakeWordActive = false
+    private var awaitingVoiceCommand = false
+    private var pendingWakePermission = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.statusBarColor = Color.rgb(5, 8, 12)
         window.navigationBarColor = Color.rgb(5, 8, 12)
         baseUrl = prefs.getString(KEY_BASE_URL, "").orEmpty()
-        if (isAllowedBaseUrl(baseUrl)) showDashboard() else showSetup()
+        if (isAllowedBaseUrl(baseUrl)) showDashboard() else if (!OllamaKeyVault.read(this).isNullOrBlank()) showOllamaChat() else showSetup()
         requestNotificationPermissionIfNeeded()
     }
 
