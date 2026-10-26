@@ -108,6 +108,140 @@ async function pollReminders(){try{const d=await api("/api/reminders/due",{metho
 function startReminderPolling(){if(reminderPoller!==null)return;pollReminders();reminderPoller=window.setInterval(pollReminders,45000)}
 $("reminderrefresh").addEventListener("click",loadReminders);
 $("reminderform").addEventListener("submit",async e=>{e.preventDefault();try{if("Notification"in window&&Notification.permission==="default"){try{await Notification.requestPermission()}catch{}}const timestamp=Math.floor(new Date($("remindertime").value).getTime()/1000);if(!Number.isFinite(timestamp))throw new Error("Bitte ein gültiges Datum und eine Uhrzeit wählen.");const data=await api("/api/reminders",{method:"POST",body:JSON.stringify({title:$("remindertitle").value,notes:$("remindernotes").value,remind_at:timestamp})});notice("remindernotice","Erinnerung lokal verschlüsselt gespeichert.","good");$("remindertitle").value="";$("remindernotes").value="";await loadReminders()}catch(err){notice("remindernotice",err.message,"warn")}});
-async function loadApprovals(){const box=$("approvalitems");try{const d=await api("/api/approvals");clear(box);if(!d.items.length)box.append(node("div","empty","Keine offenen Freigaben."));d.items.forEach(item=>{const wrap=node("div","item");wrap.append(node("h3","",item.summary),node("div","meta",item.actionType+" · "+new Date(item.createdAt*1000).toLocaleString("de-DE")));const details=node("details","");const summary=node("summary","","Details der vorgeschlagenen Aktion");details.append(summary,node("pre","result",JSON.stringify(item.payload,null,2)));wrap.append(details);wrap.append(node("p","sub warn","Die Entscheidung wird nur protokolliert. Es wird nichts gesendet oder ausgeführt."));const controls=node("div","row");for(const [label,decision] of [["Freigabe protokollieren","approve"],["Ablehnen","reject"]]){const button=node("button","",label);button.addEventListener("click",async()=>{if(!confirm("Diese Entscheidung speichern? Es wird keine Aktion ausgeführt."))return;try{await api("/api/approvals/"+encodeURIComponent(item.id)+"/decision",{method:"POST",body:JSON.stringify({decision})});await loadApprovals()}catch(e){alert(e.message)}});controls.append(button)}wrap.append(controls);box.append(wrap)})}catch(e){box.textContent=e.message}}
+function refreshActionFields(){
+  const type=$("actiontype").value;
+  const email=type==="email_draft"||type==="email_send";
+  const create=type==="calendar_create";
+  const update=type==="calendar_update";
+  $("emailfields").style.display=email?"grid":"none";
+  $("calendarfields").style.display=email?"none":"grid";
+  $("eventidwrap").style.display=update?"block":"none";
+  $("actionto").required=email;
+  $("actionsubject").required=email;
+  $("actionbody").required=email;
+  $("actioneventid").required=update;
+  $("actionsummary").required=create;
+  $("actionstart").required=create;
+  $("actionend").required=create;
+  $("actionhint").textContent=type==="email_send"
+    ?"WARNUNG: Nach zwei getrennten Bestätigungen wird diese Nachricht sofort an den angegebenen Empfänger gesendet. Prüfe Empfänger, Betreff und vollständigen Text."
+    :type==="email_draft"
+    ?"Nach der Ausführung entsteht ein Gmail-Entwurf. Dieser wird nicht versendet."
+    :type==="calendar_create"
+    ?"Der Termin wird erst nach Freigabe und separatem Ausführen im primären Google-Kalender erstellt."
+    :"Nur der angegebene bestehende Termin wird geändert. Bei geänderter Zeit müssen Beginn und Ende gemeinsam angegeben werden.";
+}
+$("actiontype").addEventListener("change",refreshActionFields);
+refreshActionFields();
+
+$("actionform").addEventListener("submit",async(event)=>{
+  event.preventDefault();
+  const type=$("actiontype").value;
+  let payload={};
+  let summary="";
+  if(type==="email_draft"||type==="email_send"){
+    payload={to:$("actionto").value.trim(),subject:$("actionsubject").value.trim(),body:$("actionbody").value.trim()};
+    summary=(type==="email_draft"?"Gmail-Entwurf vorbereiten: ":"E-Mail senden: ")+payload.subject+" → "+payload.to;
+  }else if(type==="calendar_create"){
+    const startValue=$("actionstart").value, endValue=$("actionend").value;
+    if(!startValue||!endValue){notice("actionnotice","Beginn und Ende sind erforderlich.","warn");return;}
+    payload={
+      summary:$("actionsummary").value.trim(),
+      start:new Date(startValue).toISOString(),
+      end:new Date(endValue).toISOString(),
+      location:$("actionlocation").value.trim(),
+      description:$("actiondescription").value.trim()
+    };
+    summary="Kalendertermin erstellen: "+payload.summary;
+  }else{
+    payload={event_id:$("actioneventid").value.trim()};
+    if($("actionsummary").value.trim())payload.summary=$("actionsummary").value.trim();
+    if($("actionlocation").value.trim())payload.location=$("actionlocation").value.trim();
+    if($("actiondescription").value.trim())payload.description=$("actiondescription").value.trim();
+    const startValue=$("actionstart").value, endValue=$("actionend").value;
+    if(startValue)payload.start=new Date(startValue).toISOString();
+    if(endValue)payload.end=new Date(endValue).toISOString();
+    summary="Kalendertermin aktualisieren: "+payload.event_id;
+  }
+  try{
+    const result=await api("/api/approvals",{method:"POST",body:JSON.stringify({action_type:type,summary,payload})});
+    notice("actionnotice","Verschlüsselt zur Prüfung gespeichert. Es wurde noch nichts ausgeführt. ID: "+result.id);
+    $("actionform").reset();
+    refreshActionFields();
+    await loadApprovals();
+  }catch(e){notice("actionnotice",e.message,"warn")}
+});
+
+async function loadApprovals(){
+  const box=$("approvalitems");
+  try{
+    const d=await api("/api/approvals");
+    clear(box);
+    if(!d.items.length){box.append(node("div","empty","Noch keine Freigaben oder ausgeführten Aktionen."));return;}
+    d.items.forEach(item=>{
+      const wrap=node("div","item");
+      wrap.append(
+        node("h3","",item.summary),
+        node("div","meta",item.actionType+" · "+new Date(item.createdAt*1000).toLocaleString("de-DE")),
+        node("div","meta","Status: "+item.status+" · Ausführung: "+(item.executionStatus||"nicht angefragt"))
+      );
+      const details=node("details","");
+      details.append(node("summary","","Vollständigen Aktionsinhalt anzeigen und prüfen"));
+      details.append(node("pre","result",JSON.stringify(item.payload,null,2)));
+      if(item.executionResult)details.append(node("pre","result","Ausführungsergebnis:\n"+JSON.stringify(item.executionResult,null,2)));
+      wrap.append(details);
+
+      if(item.status==="pending"){
+        wrap.append(node("p","sub warn","Noch nichts wurde ausgeführt. Öffne die vollständigen Details und prüfe jedes Feld, bevor du entscheidest."));
+        const controls=node("div","row");
+        for(const [label,decision] of [["Freigeben","approve"],["Ablehnen","reject"]]){
+          const btn=node("button","",label);
+          btn.addEventListener("click",async()=>{
+            if(!details.open){alert("Öffne zuerst die vollständigen Details und prüfe den Aktionsinhalt.");return;}
+            const question=decision==="approve"
+              ?"Diesen genauen Vorschlag freigeben? Noch wird nichts ausgeführt."
+              :"Diesen Vorschlag ablehnen?";
+            if(!confirm(question+"\n\n"+item.summary))return;
+            try{
+              await api("/api/approvals/"+encodeURIComponent(item.id)+"/decision",{method:"POST",body:JSON.stringify({decision})});
+              await loadApprovals();
+            }catch(e){alert(e.message)}
+          });
+          controls.append(btn);
+        }
+        wrap.append(controls);
+      }else if(item.status==="approved"&&item.executionSupported&&item.executionStatus==="not_requested"){
+        wrap.append(node("p","sub warn",item.actionType==="email_send"
+          ?"DIESE AKTION VERSENDET EINE E-MAIL. Nach dieser letzten Bestätigung wird der Versand an den geprüften Empfänger ausgelöst."
+          :"Die Aktion benötigt noch eine separate Ausführungsbestätigung."));
+        const btn=node("button","",item.actionType==="email_send"?"Jetzt endgültig senden":"Jetzt ausführen");
+        btn.addEventListener("click",async()=>{
+          if(!details.open){alert("Öffne zuerst die vollständigen Details und prüfe alle Felder.");return;}
+          const prompt=item.actionType==="email_send"
+            ?"Letzte Bestätigung: Jetzt diese E-Mail mit dem oben sichtbaren Empfänger, Betreff und Inhalt senden?"
+            :"Letzte Bestätigung: Jetzt die oben sichtbare Aktion an Google übermitteln?";
+          if(!confirm(prompt+"\n\n"+item.summary+"\n\nFreigaben verfallen nach 15 Minuten."))return;
+          btn.disabled=true;
+          try{
+            await api("/api/approvals/"+encodeURIComponent(item.id)+"/execute",{method:"POST"});
+            await loadApprovals();
+          }catch(e){alert(e.message);btn.disabled=false;await loadApprovals()}
+        });
+        wrap.append(btn);
+      }else if(item.executionStatus==="executed"){
+        wrap.append(node("p","sub","Ausgeführt. JARVIS speichert im Ergebnis nur die Google-ID bzw. den Link, nicht den E-Mail-Text."));
+      }else if(item.executionStatus==="failed"){
+        wrap.append(node("p","sub warn","Ausführung fehlgeschlagen oder Ergebnis unklar. JARVIS versucht nicht automatisch erneut. Prüfe Gmail/Kalender vor einem neuen Vorschlag."));
+      }else if(item.executionStatus==="expired"){
+        wrap.append(node("p","sub warn","Freigabe abgelaufen. Erstelle einen neuen Vorschlag und prüfe ihn erneut."));
+      }else if(item.status==="rejected"){
+        wrap.append(node("p","sub","Abgelehnt. Keine Aktion ausgeführt."));
+      }else if(!item.executionSupported&&item.status==="approved"){
+        wrap.append(node("p","sub warn","Für diesen Aktionstyp gibt es keinen automatisierten Handler. Bewerbungen müssen manuell auf der Originalseite abgesendet werden."));
+      }
+      box.append(wrap);
+    });
+  }catch(e){box.textContent=e.message}
+}
 $("approvalrefresh").addEventListener("click",loadApprovals);
 </script></body></html>
