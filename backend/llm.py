@@ -59,8 +59,31 @@ def provider_status() -> dict[str, Any]:
         "provider": "LM Studio" if LLM_PROVIDER == "lmstudio" else "Ollama",
         "model": LLM_MODEL,
         "mode": "local-only",
+        "endpoint": LMSTUDIO_URL if LLM_PROVIDER == "lmstudio" else OLLAMA_URL,
         "promptsStoredByApi": False,
         "toolsEnabled": False,
+    }
+
+
+def _request_timeout(timeout: float) -> httpx.Timeout:
+    """Bound connection setup while allowing slower local models to generate."""
+    try:
+        total = float(timeout)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("timeout must be a positive number") from exc
+    if total <= 0:
+        raise ValueError("timeout must be a positive number")
+    return httpx.Timeout(total, connect=min(3.0, total))
+
+
+def _build_client_kwargs(timeout: float) -> dict[str, Any]:
+    """Shared HTTP settings for local inference calls."""
+    return {
+        "timeout": _request_timeout(timeout),
+        # Local inference does not need redirects; refuse redirecting requests.
+        "follow_redirects": False,
+        # Avoid proxy environment variables routing loopback prompts elsewhere.
+        "trust_env": False,
     }
 
 
@@ -115,7 +138,7 @@ async def chat_async(messages: list[dict[str, str]], *, json_mode: bool = False,
     """Call the selected local provider asynchronously. No prompt is logged or stored."""
     url, payload, headers = _build_request(messages, json_mode)
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=3.0), follow_redirects=False) as client:
+        async with httpx.AsyncClient(**_build_client_kwargs(timeout)) as client:
             response = await client.post(url, json=payload, headers=headers)
             response.raise_for_status()
             return _extract_content(response.json())
@@ -134,7 +157,7 @@ def chat_sync(messages: list[dict[str, str]], *, json_mode: bool = False, timeou
     """Synchronous equivalent for scheduled jobs and connector callbacks."""
     url, payload, headers = _build_request(messages, json_mode)
     try:
-        with httpx.Client(timeout=httpx.Timeout(timeout, connect=3.0), follow_redirects=False) as client:
+        with httpx.Client(**_build_client_kwargs(timeout)) as client:
             response = client.post(url, json=payload, headers=headers)
             response.raise_for_status()
             return _extract_content(response.json())
