@@ -114,6 +114,10 @@ class MainActivity : Activity() {
         page.addView(label("P E R S O N A L   A S S I S T A N T", 9f, Color.rgb(115, 153, 181)).apply {
             gravity = android.view.Gravity.CENTER; setPadding(0, dp(6), 0, dp(25))
         })
+
+        page.addView(button("Ollama Cloud direkt testen (Free-Kontingent)") {
+            showOllamaCloudSetup()
+        }, LinearLayout.LayoutParams(-1, dp(48)).apply { bottomMargin = dp(18) })
         page.addView(label("Mit deinem privaten Companion verbinden", 17f, Color.rgb(225, 238, 249), true))
         page.addView(label(
             "Der Companion stellt KI, Gedächtnis und Integrationen bereit. Für JARVIS direkt auf diesem Handy nutze http://127.0.0.1:8765. Andere Geräte dürfen nur über eine private HTTPS-Verbindung verbinden.",
@@ -196,7 +200,7 @@ class MainActivity : Activity() {
                     .show()
             }, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(14) })
         }
-        setContentView(page)
+        setContentView(ScrollView(this).apply { isFillViewport = true; addView(page) })
     }
 
     private fun inputBackground() = GradientDrawable().apply {
