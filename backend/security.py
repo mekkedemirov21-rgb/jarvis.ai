@@ -28,7 +28,9 @@ def require_api_token(
 
 @lru_cache(maxsize=1)
 def _aead() -> AESGCM:
-    raw = os.environ.get("JARVIS_DATA_KEY", "")
+    raw = os.environ.get("JARVIS_DATA_KEY", "").strip()
+    if not raw or raw.lower().startswith(("replace_with", "change_me", "your_")):
+        raise RuntimeError("Generate a random local JARVIS_DATA_KEY; do not use the example placeholder.")
     try:
         key = base64.urlsafe_b64decode(raw.encode("ascii"))
     except Exception as exc:
