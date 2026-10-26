@@ -41,9 +41,11 @@ All local models can still hallucinate or follow malicious document instructions
 
 ### Gmail / email
 
-- Use official Google OAuth; request only scopes needed for specific features.
-- Start read-only for classification, detecting interview invites and job outcomes.
-- Add draft creation as a later, separate capability.
+- Implemented in the local companion: official Google OAuth requesting only `gmail.readonly` and `calendar.events.readonly` scopes.
+- The connector reads recent inbox metadata/snippets and can send those snippets to local Ollama for manual classification of probable offers, rejections, interviews and updates.
+- Encrypted local OAuth token storage uses AES-256-GCM. Credentials JSON must be placed in the ignored `.secrets/` directory.
+- No message bodies are permanently saved by the connector; no email-send, archive or delete method exists.
+- Draft creation and send approval remain future work.
 - Require an approval screen before sending or deleting anything.
 - Do not request permanent-delete access. Prefer labels/Trash and reversible actions.
 - Access/refresh tokens must be stored in an OS secure store, not the repository or browser localStorage.
@@ -51,12 +53,14 @@ All local models can still hallucinate or follow malicious document instructions
 
 ### Google Calendar
 
-- Begin with read-only event access; use least-privilege event scopes for creating/editing only when enabled.
+- Implemented read-only upcoming-event retrieval through official Google OAuth (`calendar.events.readonly`).
+- No event-write scope or create/edit/cancel method is implemented.
 - Show the proposed title, attendees, timezone, start/end, location, and notifications before an event is written.
 - Never silently invite external attendees or cancel meetings.
 
 ### Jobs and applications
 
+- Optional Adzuna API search is implemented when the user configures their free personal-search developer key in local `.env`; keys remain server-side. Normal search links remain available without keys.
 - Indeed must not be scraped and an agent must not automate Indeed Apply without express permission / official tools. The current implementation returns ordinary search links for Indeed, Bundesagentur für Arbeit, and LinkedIn so the user opens and reviews listings.
 - Never present an unofficial community wrapper as an official, authorized API.
 - The provider layer should support sources only when their documented APIs or user-approved feeds permit this use.
@@ -89,19 +93,26 @@ Run the local API as documented in `backend/README.md`. Endpoints require `Autho
 - `GET/POST /api/memory`: list note metadata and write local Markdown notes.
 - `GET/POST /api/approvals`: encrypted action proposals and review queue.
 - `POST /api/approvals/{id}/decision`: record approval/rejection only; it does not execute an external action.
-- `GET /api/jobs/search-links?q=...&location=...`: create human-operated search links, not scraped results.
+- `GET /api/jobs/search-links?q=...&location=...`: create human-operated search links.
+- `GET /api/jobs/search?q=...&location=...`: query Adzuna if local credentials are configured; otherwise return the human-operated links.
+- `POST /api/jobs/evaluate`: assess a user-supplied listing/profile locally without saving the inputs.
+- `GET /api/google/oauth/start`: begin OAuth; callback stores the token encrypted locally.
+- `GET /api/google/gmail/recent` / `POST /api/google/gmail/triage`: read inbox snippets and classify them locally for human review.
+- `GET /api/google/calendar/upcoming`: read upcoming events only.
+- `DELETE /api/google/disconnect-local`: remove the locally stored token; provider-side grant must be revoked separately.
+- `GET /`: local companion dashboard.
 
 The API currently is not connected to the Android UI. A secure phone-to-companion pairing and TLS-protected transport is required before networking the APK to a PC service.
 
 ## 5. Phased roadmap
 
-1. Local foundations (current): model adapter, local memory vault, encrypted approval records, auth, job-search links.
-2. Verification: automated tests, security review, rate limits, audit events and retention controls.
+1. Foundations and local dashboard (implemented in part): local model chat, Markdown memory, encrypted approval records, token authentication, Adzuna API search when configured, job fit evaluation, and Google read-only OAuth connector.
+2. Verification and hardening: tests, security review, rate limiting, audit events, retention controls, secret-store support and recovery procedures.
 3. Device pairing: Android Keystore-backed key, authenticated pairing, TLS, revocation and no localStorage secrets.
-4. Mail/calendar: OAuth setup, read-only sync, triage and notifications; add drafts next.
-5. Job workflow: preferences/profile, permitted data sources, match scoring with explanations, application kit and human-confirmed submissions only through allowed channels.
+4. Mail/calendar: scheduled sync, local notifications and draft workflows; all write operations require fresh approval.
+5. Job workflow: persistent preferences, local matching, application kit and human-confirmed submission only through allowed channels.
 6. Relationship module: private memory and reminders with a clear no-covert-surveillance boundary.
-7. Hardening and release: dependency scanning, backup/recovery, threat modeling, privacy policy, consent screens and external testing.
+7. Release: dependency scanning, threat modeling, privacy policy, consent screens and external testing.
 
 ## 6. Non-goals
 
