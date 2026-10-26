@@ -2,7 +2,7 @@ name: Build JARVIS APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, jarvis-galaxy-localhost]
     paths:
       - 'app/**'
       - 'build.gradle.kts'

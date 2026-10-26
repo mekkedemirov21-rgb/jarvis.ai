@@ -91,18 +91,18 @@ class MainActivity : Activity() {
         })
         page.addView(label("Mit deinem privaten Companion verbinden", 17f, Color.rgb(225, 238, 249), true))
         page.addView(label(
-            "Der Companion läuft auf deinem eigenen PC oder Heimserver und stellt Ollama, Gedächtnis und Integrationen bereit. Gib die HTTPS-Adresse dieses Dienstes ein.",
+            "Der Companion stellt KI, Gedächtnis und Integrationen bereit. Für JARVIS direkt auf diesem Handy nutze http://127.0.0.1:8765. Andere Geräte dürfen nur über eine private HTTPS-Verbindung verbinden.",
             12f, Color.rgb(148, 169, 188)
         ).apply { setPadding(0, dp(8), 0, dp(14)) })
 
         val urlInput = EditText(this).apply {
-            hint = "https://dein-server.example"
+            hint = "http://127.0.0.1:8765 (auf diesem Handy)"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             setSingleLine(true); textSize = 13f
             setTextColor(Color.rgb(235, 246, 255)); setHintTextColor(Color.rgb(95, 116, 134))
             setPadding(dp(12), dp(12), dp(12), dp(12)); setText(baseUrl)
             background = inputBackground()
-            contentDescription = "HTTPS-Adresse des JARVIS Companion"
+            contentDescription = "Adresse des JARVIS Companion; HTTP nur für 127.0.0.1"
         }
         page.addView(urlInput, LinearLayout.LayoutParams(-1, dp(50)).apply { bottomMargin = dp(10) })
 
@@ -127,7 +127,7 @@ class MainActivity : Activity() {
             val candidate = urlInput.text.toString().trim().trimEnd('/')
             val enteredToken = tokenInput.text.toString().trim()
             if (!isAllowedBaseUrl(candidate)) {
-                showSetup("Bitte eine gültige HTTPS-Adresse angeben. Unsichere HTTP-Verbindungen sind nicht erlaubt.")
+                showSetup("Bitte HTTPS verwenden. HTTP ist ausschließlich für 127.0.0.1 auf diesem Handy erlaubt.")
                 return@button
             }
             if (enteredToken.isNotEmpty()) {
@@ -152,7 +152,7 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, dp(50)).apply { bottomMargin = dp(14) })
 
         page.addView(label(
-            "Der Token wird mit AES-GCM und einem Geräteschlüssel im Android Keystore verschlüsselt. Die Verbindung zum Companion muss HTTPS verwenden; der Server selbst sollte nur für dich über ein privates VPN erreichbar sein. JARVIS führt keine E-Mail-, Kalender- oder Bewerbungsaktion automatisch aus.",
+            "Der Token wird mit AES-GCM und einem Geräteschlüssel im Android Keystore verschlüsselt. HTTP ist nur für 127.0.0.1 auf diesem Gerät erlaubt; andere Server müssen HTTPS nutzen und privat erreichbar sein. JARVIS führt keine E-Mail-, Kalender- oder Bewerbungsaktion automatisch aus.",
             10f, Color.rgb(103, 128, 148)
         ))
         if (tokenExists || baseUrl.isNotBlank()) {
@@ -241,7 +241,7 @@ class MainActivity : Activity() {
                     super.onReceivedError(view, request, error)
                     if (request.isForMainFrame) Toast.makeText(
                         this@MainActivity,
-                        "Companion nicht erreichbar. Prüfe HTTPS-Adresse und private VPN-Verbindung.",
+                        "JARVIS-Server nicht erreichbar. Prüfe Adresse und ob Termux auf diesem Handy läuft.",
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -267,11 +267,18 @@ class MainActivity : Activity() {
     } catch (_: Exception) { false }
 
     private fun isAllowedBaseUrl(value: String): Boolean = try {
-        if (value.isBlank() || value.length > 240) false else {
+        if (value.isBlank() || value.length > 240) {
+            false
+        } else {
             val uri = Uri.parse(value)
-            uri.scheme == "https" && !uri.host.isNullOrBlank() &&
+            val scheme = uri.scheme?.lowercase()
+            val hasSafeAuthority = !uri.host.isNullOrBlank() &&
                 uri.userInfo == null && uri.query == null && uri.fragment == null &&
                 (uri.path.isNullOrBlank() || uri.path == "/")
+            val isHttps = scheme == "https"
+            // Insecure HTTP is permitted only to the same Android device's loopback.
+            val isSameDeviceHttp = scheme == "http" && uri.host == "127.0.0.1"
+            hasSafeAuthority && (isHttps || isSameDeviceHttp)
         }
     } catch (_: Exception) { false }
 

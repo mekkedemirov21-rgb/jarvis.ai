@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
@@ -35,7 +36,7 @@ class NotificationWorker(context: Context, params: WorkerParameters) : Worker(co
         val prefs = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val base = prefs.getString(KEY_BASE_URL, "").orEmpty().trimEnd('/')
         val token = TokenVault.read(applicationContext) ?: return Result.success()
-        if (!base.startsWith("https://")) return Result.success()
+        if (!base.startsWith("https://") && !isAllowedLoopbackHttp(base)) return Result.success()
 
         return try {
             val email = request("$base/api/monitor/alerts", token, "GET")
@@ -67,6 +68,13 @@ class NotificationWorker(context: Context, params: WorkerParameters) : Worker(co
             Result.retry()
         }
     }
+
+    private fun isAllowedLoopbackHttp(value: String): Boolean = try {
+        val uri = Uri.parse(value)
+        uri.scheme == "http" && uri.host == "127.0.0.1" &&
+            uri.userInfo == null && uri.query == null && uri.fragment == null &&
+            (uri.path.isNullOrBlank() || uri.path == "/")
+    } catch (_: Exception) { false }
 
     private fun request(url: String, token: String, method: String): JSONObject {
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
