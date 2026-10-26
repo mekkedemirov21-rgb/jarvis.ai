@@ -110,8 +110,8 @@ async def integration_status() -> dict:
         "llm": {"status": "configured-local", "provider": "Ollama", "model": MODEL},
         "memory": {"status": "local-markdown-vault", "format": "Obsidian-compatible Markdown"},
         "approvals": {"status": "local-queue", "payloadEncryption": "AES-256-GCM"},
-        "gmail": {"status": "not-configured", "note": "Google OAuth consent and least-privilege scopes required"},
-        "googleCalendar": {"status": "not-configured", "note": "Google OAuth consent and least-privilege scopes required"},
+        "gmail": {"status": "read-only-connected" if (DATA_DIR / "google-token.enc").is_file() else "not-configured", "note": "Read-only OAuth connector; consent required"},
+        "googleCalendar": {"status": "read-only-connected" if (DATA_DIR / "google-token.enc").is_file() else "not-configured", "note": "Read-only OAuth connector; consent required"},
         "jobSearch": {"status": "external-search-links-only", "note": "No job-board scraping or automatic applications"},
         "whatsappPersonal": {"status": "not-supported-by-official-personal-api", "note": "No access to private personal chat history"},
         "whatsappBusiness": {"status": "not-configured", "note": "Business API is a separate, policy-bound integration"},
@@ -263,3 +263,11 @@ app.include_router(google_router)
 
 from backend.jobs import router as jobs_router  # noqa: E402
 app.include_router(jobs_router)
+
+
+from fastapi.responses import FileResponse  # noqa: E402
+
+@app.get("/", include_in_schema=False)
+async def dashboard() -> FileResponse:
+    """Serve the local dashboard from the same loopback-only origin as the API."""
+    return FileResponse(ROOT / "backend" / "web" / "index.html", media_type="text/html")
