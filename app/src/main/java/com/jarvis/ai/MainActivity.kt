@@ -392,7 +392,7 @@ class MainActivity : Activity() {
             startWakeWordListening()
         }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(4) })
         voiceRow.addView(button("Mikrofon stoppen") {
-            stopWakeWordListening()
+            stopWakeWordListening(disablePreference = true)
         }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(4) })
         root.addView(voiceRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
 
@@ -406,6 +406,9 @@ class MainActivity : Activity() {
             showSetup()
         }, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(2) })
         setContentView(root)
+        if (cloudPrefs.getBoolean("wakeword_enabled", false)) {
+            mainHandler.post { if (!isFinishing) startWakeWordListening() }
+        }
     }
 
     private fun appendCloudTranscript(line: String) {
@@ -525,6 +528,7 @@ class MainActivity : Activity() {
         stopWakeWordListening()
         wakeWordActive = true
         awaitingVoiceCommand = false
+        cloudPrefs.edit().putBoolean("wakeword_enabled", true).apply()
         ensureTextToSpeech()
         try {
             speechRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this).apply {
@@ -628,8 +632,9 @@ class MainActivity : Activity() {
         }, delayMs)
     }
 
-    private fun stopWakeWordListening() {
+    private fun stopWakeWordListening(disablePreference: Boolean = false) {
         wakeWordActive = false
+        if (disablePreference) cloudPrefs.edit().putBoolean("wakeword_enabled", false).apply()
         awaitingVoiceCommand = false
         try { speechRecognizer?.cancel() } catch (_: Exception) {}
         try { speechRecognizer?.destroy() } catch (_: Exception) {}
