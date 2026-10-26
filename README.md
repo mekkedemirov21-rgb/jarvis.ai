@@ -6,8 +6,8 @@ JARVIS is a privacy-oriented personal assistant with an Android client and a loc
 
 - **Android client:** connects to the private companion over HTTPS; the API token is encrypted with Android Keystore and inserted into the dashboard session. It can show neutral Android notifications for new queued job/mail hints and due reminders (WorkManager polling, not real-time push).
 - **Local AI:** supports Ollama or LM Studio loopback APIs. Default is Qwen3.5 4B through Ollama. Prompts are not intentionally persisted by the API and the model has no tools or direct authority to act.
-- **Gmail and Google Calendar:** optional official OAuth connector with read-only scopes; reads recent email metadata/snippets and upcoming events. Optional background mail triage can notify about a likely job offer, rejection, interview, or application update.
-- **Job search:** optional Adzuna personal-search API (free/evaluation tier subject to provider limits/terms) plus normal links to Indeed, Bundesagentur für Arbeit, and LinkedIn. Job matching runs against a locally stored encrypted profile and local LLM.
+- **Gmail and Google Calendar:** optional official OAuth connector, read-only by default; opt-in Gmail draft/send and Calendar create/update are available through the two-step approval queue after fresh write-scope consent. Optional background triage can notify about a likely job offer, rejection, interview or application update.
+- **Job search:** optional Adzuna personal-search API (free/evaluation tier subject to provider limits/terms) plus normal links to Indeed, Bundesagentur für Arbeit, and LinkedIn. The Jobs tab can save encrypted watch profiles, display monitor status and show ranked job alerts; the local model explains fit and missing requirements, then you decide whether to apply.
 - **Application preparation:** evaluates fit and missing qualifications. Automatic application submission is not implemented; Indeed is not scraped and its site is not automated.
 - **Memory:** portable Obsidian-compatible Markdown notes. JARVIS retrieves up to three lexically relevant local excerpts into each chat context; it does not send the whole vault. The Markdown files are plaintext, so host full-disk encryption is required.
 - **Relationship support:** encrypted reminders and user-written notes. No covert access to private WhatsApp chats.
@@ -62,7 +62,7 @@ By default, the scopes are read-only: `gmail.readonly` and `calendar.events.read
 
 ### Optional job monitoring
 
-Register for an Adzuna developer key and set `ADZUNA_APP_ID` and `ADZUNA_APP_KEY` in local `.env`. The free tier is for evaluation/personal-search use and is subject to provider limits and terms. Create a job watch through the dashboard/API and opt in with `JARVIS_ENABLE_JOB_MONITOR=true`. No automated applications are submitted.
+Register for an Adzuna developer key and set `ADZUNA_APP_ID` and `ADZUNA_APP_KEY` in local `.env`. The free tier is for evaluation/personal-search use and is subject to provider limits and terms. In the Jobs tab, save a search profile and opt in with `JARVIS_ENABLE_JOB_MONITOR=true`. Restart JARVIS. The first monitor pass establishes a baseline; later new listings are locally scored and suitable hits create alerts. The PC must stay on and the monitor is limited by provider schedule/quotas. Android notifications are periodic, not real-time. No automated applications are submitted.
 
 ## Security boundaries
 
