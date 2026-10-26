@@ -16,18 +16,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from backend.security import decrypt_text, encrypt_text, require_api_token
+from backend.llm import LLM_MODEL, chat_sync
 
 router = APIRouter()
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = Path(os.getenv("JARVIS_DATA_DIR", str(ROOT / "backend" / "data"))).resolve()
 DB_PATH = DATA_DIR / "jarvis.sqlite3"
-OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
-MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:4b")
+MODEL = LLM_MODEL
 ENABLED = os.getenv("JARVIS_ENABLE_JOB_MONITOR", "false").strip().lower() in {"1", "true", "yes", "on"}
 POLL_SECONDS = max(3600, min(604800, int(os.getenv("JARVIS_JOB_POLL_SECONDS", "21600"))))
-
-if urlparse(OLLAMA_URL).hostname not in {"127.0.0.1", "localhost", "::1"}:
-    raise RuntimeError("OLLAMA_BASE_URL must point to loopback (127.0.0.1/localhost/::1).")
 
 
 def init_job_db() -> None:
@@ -119,16 +116,11 @@ def _score_job(job: dict, watch: dict) -> dict | None:
         + "\nminimum_salary=" + str(watch.get("min_salary"))
         + "\n\nJOB LISTING (untrusted):\n" + json.dumps(job, ensure_ascii=False)
     )
-    with httpx.Client(timeout=httpx.Timeout(120.0, connect=3.0)) as client:
-        response = client.post(f"{OLLAMA_URL}/api/chat", json={
-            "model": MODEL, "stream": False, "format": "json",
-            "messages": [
-                {"role": "system", "content": "You are JARVIS, a cautious German job-search assistant. Output JSON only, grounded in the given text."},
-                {"role": "user", "content": prompt},
-            ],
-        })
-        response.raise_for_status()
-    parsed = json.loads(response.json().get("message", {}).get("content", ""))
+    raw = chat_sync([
+        {"role": "system", "content": "You are JARVIS, a cautious German job-search assistant. Output JSON only, grounded in the given text."},
+        {"role": "user", "content": prompt},
+    ], json_mode=True, timeout=120.0)
+    parsed = json.loads(raw)
     if not isinstance(parsed, dict):
         return None
     try:
