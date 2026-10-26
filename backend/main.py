@@ -118,15 +118,35 @@ async def health() -> dict:
 
 @app.get("/api/integrations/status", dependencies=[Depends(require_api_token)])
 async def integration_status() -> dict:
+    google_writes_enabled = os.getenv("JARVIS_ENABLE_GOOGLE_WRITES", "false").strip().lower() in {"1", "true", "yes", "on"}
+    google_connected = (DATA_DIR / "google-token.enc").is_file()
     return {
         "llm": {"status": "configured-local", **provider_status()},
         "memory": {"status": "local-markdown-vault", "format": "Obsidian-compatible Markdown"},
-        "approvals": {"status": "local-queue", "payloadEncryption": "AES-256-GCM"},
-        "emailMonitor": {"status": "enabled" if os.getenv("JARVIS_ENABLE_EMAIL_MONITOR", "false").strip().lower() in {"1", "true", "yes", "on"} else "disabled-by-default", "requiresGoogleOAuth": True, "actions": "notifications-only; no writes"},
-        "gmail": {"status": "read-only-connected" if (DATA_DIR / "google-token.enc").is_file() else "not-configured", "note": "Read-only OAuth connector; consent required"},
-        "googleCalendar": {"status": "read-only-connected" if (DATA_DIR / "google-token.enc").is_file() else "not-configured", "note": "Read-only OAuth connector; consent required"},
-        "jobSearch": {"status": "adzuna-api-configured" if (os.getenv("ADZUNA_APP_ID", "").strip() and os.getenv("ADZUNA_APP_KEY", "").strip()) else "search-links-only", "note": "Uses Adzuna only when local API keys are configured; no job-board scraping or automatic applications"},
-        "whatsappPersonal": {"status": "not-supported-by-official-personal-api", "note": "No access to private personal chat history"},
+        "approvals": {"status": "two-step-review-and-execution", "payloadEncryption": "AES-256-GCM", "approvalWindowSeconds": 900},
+        "emailMonitor": {
+            "status": "enabled" if os.getenv("JARVIS_ENABLE_EMAIL_MONITOR", "false").strip().lower() in {"1", "true", "yes", "on"} else "disabled-by-default",
+            "requiresGoogleOAuth": True,
+            "actions": "notifications-only; mail is never modified by the monitor"
+        },
+        "gmail": {
+            "status": "connected" if google_connected else "not-configured",
+            "writeActionsEnabled": google_writes_enabled,
+            "note": "Read Gmail by OAuth; drafts/sending require the explicit local write opt-in and new OAuth consent."
+        },
+        "googleCalendar": {
+            "status": "connected" if google_connected else "not-configured",
+            "writeActionsEnabled": google_writes_enabled,
+            "note": "Read events by OAuth; event create/update require explicit approval and write scopes."
+        },
+        "jobSearch": {
+            "status": "adzuna-api-configured" if (os.getenv("ADZUNA_APP_ID", "").strip() and os.getenv("ADZUNA_APP_KEY", "").strip()) else "search-links-only",
+            "note": "Uses Adzuna only when local API keys are configured; no job-board scraping or automatic applications"
+        },
+        "whatsappPersonal": {
+            "status": "not-supported-by-official-personal-api",
+            "note": "No access to private personal chat history"
+        },
         "whatsappBusiness": {"status": "not-configured", "note": "Business API is a separate, policy-bound integration"},
     }
 
