@@ -110,3 +110,34 @@ def test_job_search_falls_back_to_authorized_source_links_without_keys() -> None
     assert {source["name"] for source in body["searchLinks"]} == {
         "Indeed", "Bundesagentur für Arbeit", "LinkedIn Jobs"
     }
+
+
+def test_relationship_reminder_payload_is_encrypted_and_cancelable() -> None:
+    import time
+
+    marker = "PRIVATE_RELATIONSHIP_NOTE_41f9"
+    created = client.post(
+        "/api/reminders",
+        json={
+            "title": "Anniversary reminder",
+            "notes": marker,
+            "remind_at": int(time.time()) + 3600,
+        },
+        headers=AUTH,
+    )
+    assert created.status_code == 200
+    reminder_id = created.json()["id"]
+    assert created.json()["storedEncrypted"] is True
+
+    raw_db = DB_PATH.read_bytes()
+    assert marker.encode() not in raw_db
+    assert b"Anniversary reminder" not in raw_db
+
+    listed = client.get("/api/reminders", headers=AUTH)
+    row = next(item for item in listed.json()["items"] if item["id"] == reminder_id)
+    assert row["title"] == "Anniversary reminder"
+    assert row["notes"] == marker
+
+    deleted = client.delete(f"/api/reminders/{reminder_id}", headers=AUTH)
+    assert deleted.status_code == 200
+    assert deleted.json()["status"] == "cancelled"
