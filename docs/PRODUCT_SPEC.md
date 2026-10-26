@@ -4,6 +4,19 @@
 
 A local-first assistant that helps with daily organization, email/calendar triage, job search/application preparation, and relationship reminders while keeping the user in control of external actions.
 
+## Implemented scope (26 October 2026)
+
+The following behavior exists in the current development branch:
+- Local LLM chat through Ollama or LM Studio loopback APIs; no cloud model provider is included in the adapter.
+- Obsidian-compatible local Markdown memory with lightweight lexical retrieval of up to three relevant note excerpts per chat.
+- Optional Google OAuth for read-only Gmail/Calendar by default.
+- Optional Gmail draft/send and Calendar create/update only after a local opt-in for write scopes, a validated encrypted proposal, explicit approval and a separate execution request within 15 minutes.
+- Optional Adzuna job search and encrypted watch profiles; fit scores are local-model decision support.
+- Local reminders, email/job alert queue and generic Android notifications through periodic polling.
+- No automatic job application submission, no personal WhatsApp chat import, no automatic email deletion, and no automatic offer acceptance or rejection.
+
+Still required before a wider release: tests against real authorized test accounts, OAuth consent-screen review, export/deletion and key-recovery workflow, richer audit records, robust retry/rollback handling, and independent security review. No production security certification or guarantee of zero vulnerabilities is claimed.
+
 ## Interaction principles
 
 - Chat-first, with a concise daily briefing and dedicated sections for Mail, Calendar, Jobs, Memory and Relationship.
