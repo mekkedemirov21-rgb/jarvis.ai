@@ -579,7 +579,7 @@ class MainActivity : Activity() {
             scheduleListeningCycle(500)
             return
         }
-        val utterance = "jarvis_\${System.currentTimeMillis()}"
+        val utterance = "jarvis_" + System.currentTimeMillis()
         val result = engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, utterance)
         if (result == TextToSpeech.ERROR) scheduleListeningCycle(500)
     }
@@ -596,7 +596,7 @@ class MainActivity : Activity() {
             }
             return
         }
-        if (Regex("\\\\bjarvis\\\\b", RegexOption.IGNORE_CASE).containsMatchIn(heard)) {
+        if (Regex("\\bjarvis\\b", RegexOption.IGNORE_CASE).containsMatchIn(heard)) {
             awaitingVoiceCommand = true
             updateCloudStatus("JARVIS erkannt. Ich antworte …")
             speakWakeText("Ich bin startklar. Was kann ich für dich tun?")
@@ -787,5 +787,6 @@ class MainActivity : Activity() {
         private const val KEY_NOTIFIED_IDS = "notified_ids"
         private const val KEY_NOTIFICATIONS_INITIALIZED = "notifications_initialized"
         private const val REQUEST_NOTIFICATIONS = 876
+        private const val REQUEST_MICROPHONE = 877
     }
 }
