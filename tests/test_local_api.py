@@ -212,13 +212,13 @@ def test_chat_memory_retrieval_includes_only_relevant_local_notes() -> None:
     relevant = VAULT_DIR / "memory-retrieval-test-relevant.md"
     irrelevant = VAULT_DIR / "memory-retrieval-test-irrelevant.md"
     relevant.write_text(
-        '---\\ntitle: Bewerbungsprofil Python\\ntags: ["jobs"]\\n---\\n'
-        'Ich suche Python-Entwicklerstellen in Karlsruhe und bevorzuge hybrides Arbeiten.\\n',
+        '---\ntitle: Bewerbungsprofil Python\ntags: ["jobs"]\n---\n'
+        'Ich suche Python-Entwicklerstellen in Karlsruhe und bevorzuge hybrides Arbeiten.\n',
         encoding="utf-8",
     )
     irrelevant.write_text(
-        '---\\ntitle: Lieblingsrezepte\\ntags: ["essen"]\\n---\\n'
-        'Mein Lieblingsgericht ist Linsensuppe mit Zitrone.\\n',
+        '---\ntitle: Lieblingsrezepte\ntags: ["essen"]\n---\n'
+        'Mein Lieblingsgericht ist Linsensuppe mit Zitrone.\n',
         encoding="utf-8",
     )
     try:
