@@ -35,6 +35,10 @@ The encrypted token is stored under `backend/data/google-token.enc`. The API exp
 
 Google may require restricted-scope verification before a public app can be distributed broadly. Use test accounts while developing.
 
+## Optional background email monitoring
+
+By default, mailbox monitoring is **disabled**. After configuring Google OAuth, set `JARVIS_ENABLE_EMAIL_MONITOR=true` in the local `.env` and restart the service. The interval defaults to 15 minutes and may be changed using `JARVIS_EMAIL_POLL_SECONDS` (minimum five minutes). The first successful pass creates a baseline from recent inbox message IDs and does not alert on old mail. Subsequent passes run local Ollama classification on newly arrived snippets and queue encrypted notifications for likely offers, rejections, interviews and application updates. It never sends, deletes or modifies mail. If the PC/service stops, there is no check until it runs again. The dashboard can show browser notifications while open; Android push delivery is not implemented.
+
 ## Optional personal job search
 
 Register at [Adzuna Developer](https://developer.adzuna.com/) and place your `app_id` and `app_key` in the ignored local `.env` as `ADZUNA_APP_ID` and `ADZUNA_APP_KEY`. Adzuna's terms permit personal job search under its free/evaluation tier, subject to its current limits and terms. Without keys, the app shows normal search links for Indeed, Bundesagentur für Arbeit and LinkedIn.
@@ -47,6 +51,6 @@ No job-board scraping or automatic application submissions are implemented.
 - Job-fit analysis sends the supplied profile/description only to local Ollama and does not save the inputs.
 - Markdown memory notes are local plaintext for Obsidian interoperability; enable full-disk encryption.
 - Approval payloads and Google OAuth token files are encrypted with AES-256-GCM, but external action execution is not implemented.
-- Email triage is manually triggered. It classifies snippets and returns a suggestion; it cannot notify in the background when the dashboard is closed.
+- Email triage can be manually triggered. Optional opt-in server-side monitoring polls recent inbox messages and queues encrypted outcome alerts while the local service runs. The dashboard displays browser notifications only when open; Android push is not yet implemented.
 - Gmail/Calendar writes, background monitoring, mobile push notifications, secure Android-to-companion pairing, OS keychain integration and access to personal WhatsApp chat history are not implemented.
 - Never expose the API or Ollama to the LAN/Internet or place credentials or personal data in this public repository.
