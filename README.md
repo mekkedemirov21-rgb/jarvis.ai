@@ -1,55 +1,82 @@
-# JARVIS — Local-first Personal Assistant
+# JARVIS — local-first personal assistant
 
-JARVIS is being developed as a privacy-first personal assistant. The Android APK currently hosts the original visual interface; the local companion service provides a growing functional foundation.
+JARVIS is a privacy-oriented personal assistant with an Android client and a local companion service. The repository is public; **do not commit secrets, account data, CVs, messages, notes, or local databases**.
 
-## Current functions
+## What is implemented today
 
-- **Local AI chat:** Ollama, with default model `qwen3.5:4b`; prompts are not intentionally persisted.
-- **Google Mail / Calendar:** optional official OAuth connector with Gmail and Calendar read-only scopes. Reads recent inbox metadata/snippets and upcoming primary-calendar events. Google OAuth credentials must be configured locally.
-- **Email triage:** uses the local model to classify snippets into possible job offer, rejection, interview, application update or other. Results require human review; no mail is sent, deleted or archived.
-- **Job search:** optional Adzuna developer API for permitted personal job searching, plus normal search links for Indeed, Bundesagentur für Arbeit and LinkedIn. Indeed is not scraped and applications are never automatically submitted.
-- **Job fit:** evaluates user-provided profile and job text with local Ollama without saving those inputs.
-- **Memory:** stores local Obsidian-compatible Markdown notes.
-- **Approval queue:** stores proposed action payloads encrypted with AES-256-GCM. Approval/rejection is recorded, but does not execute actions.
-- **Local dashboard:** served at `http://127.0.0.1:8765/` by the companion API.
-- **Android:** Kotlin/WebView APK and JARVIS-inspired vector icon; secure phone-to-companion pairing is not implemented yet.
+- **Android client:** connects to the private companion over HTTPS; the API token is encrypted with Android Keystore and inserted into the dashboard session. It can show neutral Android notifications for new queued job/mail hints and due reminders (WorkManager polling, not real-time push).
+- **Local AI:** supports Ollama or LM Studio loopback APIs. Default is Qwen3.5 4B through Ollama. Prompts are not intentionally persisted by the API and the model has no tools or direct authority to act.
+- **Gmail and Google Calendar:** optional official OAuth connector with read-only scopes; reads recent email metadata/snippets and upcoming events. Optional background mail triage can notify about a likely job offer, rejection, interview, or application update.
+- **Job search:** optional Adzuna personal-search API (free/evaluation tier subject to provider limits/terms) plus normal links to Indeed, Bundesagentur für Arbeit, and LinkedIn. Job matching runs against a locally stored encrypted profile and local LLM.
+- **Application preparation:** evaluates fit and missing qualifications. Automatic application submission is not implemented; Indeed is not scraped and its site is not automated.
+- **Memory:** portable Markdown notes compatible with Obsidian.
+- **Relationship support:** encrypted reminders and user-written notes. No covert access to private WhatsApp chats.
+- **Approval queue:** encrypted proposed action payloads and review states. Approving a queue item currently records your decision; it does not send an email, change a calendar, or submit an application.
 
-## Start the local companion
+For detailed model comparisons, setup choices, providers and the current feature boundary, read [AI Models and Integrations](docs/AI_MODELS_AND_INTEGRATIONS.md), [Architecture](docs/ARCHITECTURE.md), [Product Specification](docs/PRODUCT_SPEC.md), and [Security](docs/SECURITY.md).
 
-Requirements: Python 3.11+, Ollama and a supported local model.
+## Recommended free local model
+
+Start with Ollama + Qwen3.5 4B:
+
+```bash
+ollama pull qwen3.5:4b
+```
+
+It uses your own computer rather than paying for a hosted inference API. A larger 9B model can be tested if the machine has enough memory. The 4B model is useful for general chat, summarization, simple JSON triage and job comparison, but can still make mistakes. Benchmark it on your own representative cases before trusting important recommendations.
+
+LM Studio is another supported local provider. Configure `JARVIS_LLM_PROVIDER=lmstudio`, use its local OpenAI-compatible server at `http://127.0.0.1:1234/v1`, and set `JARVIS_LLM_MODEL` to the model identifier exposed by the LM Studio server. Never configure a public/cloud endpoint for personal mail or CV content.
+
+## Run the local companion on your computer
+
+Requirements: Python 3.11+, either Ollama or LM Studio, and a model downloaded locally.
 
 1. Copy `.env.example` to `.env` in the repository root.
-2. Generate a strong API token: `python -c "import secrets; print(secrets.token_urlsafe(48))"`
-3. Generate a separate 32-byte encryption key: `python -c "import base64,secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"`
-4. Set both values in `.env` as `JARVIS_API_TOKEN` and `JARVIS_DATA_KEY`. Do not leave example placeholders.
-5. Install Ollama and run `ollama pull qwen3.5:4b`.
-6. Install dependencies: `python -m pip install -r backend/requirements.txt`.
+2. Generate a local API token: `python -c "import secrets; print(secrets.token_urlsafe(48))"`. Set `JARVIS_API_TOKEN`.
+3. Generate a separate local AES-256 key: `python -c "import base64,secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"`. Set `JARVIS_DATA_KEY`.
+4. Replace the placeholders in `.env`. Never commit this file or the OAuth client secret.
+5. Install dependencies: `python -m pip install -r backend/requirements.txt`.
+6. Keep the selected local model server bound to loopback.
 7. Start from the repository root: `python -m uvicorn backend.main:app --host 127.0.0.1 --port 8765`.
-8. Open `http://127.0.0.1:8765/` in the same computer's browser and enter your local API token. It is not stored in browser storage.
+8. Open `http://127.0.0.1:8765/` on the same computer and enter the local API token.
 
-### Optional Gmail and Calendar connection
+The API token is not saved in browser storage. The API is designed for loopback-only access; do not bind it to `0.0.0.0` or port-forward it.
 
-- In Google Cloud Console, enable Gmail API and Google Calendar API and configure OAuth consent.
-- Create an OAuth **Web application** client with this exact redirect URI: `http://127.0.0.1:8765/oauth/google/callback`.
-- Save the downloaded client JSON as `.secrets/google-oauth-client.json` (the folder is ignored by Git).
-- Restart the API, open the dashboard, enter the local token and select **Google-Konto autorisieren**.
-- The first connector requests read-only `gmail.readonly` and `calendar.events.readonly` scopes. Google may require verification for restricted scopes before distributing a public app.
+## Connect Android to the private companion
 
-### Optional job-search API
+1. Run the companion on the PC with the command above.
+2. Put both PC and Android phone on a private VPN such as Tailscale. On the PC, use `tailscale serve 8765` to expose the local port **only inside your private tailnet** over HTTPS. Do not use Tailscale Funnel or a public reverse proxy for this privacy-first deployment.
+3. Install the APK from a successful [Build JARVIS APK workflow](https://github.com/mekkedemirov21-rgb/jarvis.ai/actions/workflows/build-apk.yml) run (Artifact: `JARVIS-debug-APK`).
+4. In JARVIS, enter the HTTPS address provided by Tailscale Serve and the local `JARVIS_API_TOKEN`. The token is stored encrypted with Android Keystore. Grant notification permission if prompted.
 
-Create a free personal-search developer key at [Adzuna Developer](https://developer.adzuna.com/), then put `ADZUNA_APP_ID` and `ADZUNA_APP_KEY` in the local `.env`. Without the key, the dashboard still provides standard links to Indeed, Bundesagentur für Arbeit and LinkedIn. No secret is sent to the browser or saved in Git.
+Android periodic work checks queued alerts every 15-minute-or-longer interval and Android may delay background work to save battery. This is not a guaranteed real-time push service. The PC/companion must be running, the phone must reach it over the private VPN, and the corresponding monitoring settings must be enabled.
 
-## Security and scope boundaries
+### Optional Google Mail and Calendar
 
-Read [docs/SECURITY.md](docs/SECURITY.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md).
+1. In Google Cloud Console enable Gmail API and Google Calendar API.
+2. Create an OAuth **Web application** client.
+3. For same-computer local use, register `http://127.0.0.1:8765/oauth/google/callback`. For Android via private HTTPS, set `GOOGLE_REDIRECT_URI` to the exact HTTPS companion URL plus `/oauth/google/callback` and register that same URI in Google Cloud.
+4. Save client JSON to `.secrets/google-oauth-client.json` (ignored by Git), restart the companion, and authorize from the dashboard.
 
-- Keep Ollama and the API bound to loopback. Never port-forward these ports or expose them through a public tunnel.
-- Approval payloads are encrypted locally; Markdown memory notes are plaintext for Obsidian compatibility, so enable full-disk encryption.
-- WhatsApp personal-chat history is not available through a general official consumer API. The relationship module starts with private notes/reminders, not covert chat access.
-- Gmail/Calendar access is read-only. Sending mail, deleting messages, changing calendar entries, push notifications to Android, automatic background monitoring, trusted device pairing and real action execution are not implemented.
-- "No data leaks" or "zero vulnerabilities" cannot be guaranteed. Security needs layered controls, patching, tests, backups and external review.
-- This GitHub repository is public. Never commit secrets, OAuth files, private data or local database/vault files.
+The scopes are read-only: `gmail.readonly` and `calendar.events.readonly`. Google may require app verification for public distribution. Email monitoring is disabled by default. To opt in on your own PC set `JARVIS_ENABLE_EMAIL_MONITOR=true` and restart the companion. The first monitoring run establishes a baseline rather than notifying about old mail.
+
+### Optional job monitoring
+
+Register for an Adzuna developer key and set `ADZUNA_APP_ID` and `ADZUNA_APP_KEY` in local `.env`. The free tier is for evaluation/personal-search use and is subject to provider limits and terms. Create a job watch through the dashboard/API and opt in with `JARVIS_ENABLE_JOB_MONITOR=true`. No automated applications are submitted.
+
+## Security boundaries
+
+- Use full-disk encryption for the machine and back up encryption keys safely.
+- AES-256-GCM encrypts approval payloads, local Google OAuth tokens, saved job watches and relationship reminders. Obsidian Markdown notes remain plaintext files for compatibility.
+- The Android API token uses Android Keystore-backed encryption; the companion connection requires HTTPS.
+- The server and local model must stay private. The model sees input in plaintext because it must process it.
+- There is no formal E2E encryption of model prompts from a server that processes them. HTTPS protects transport; at-rest encryption protects only the specified files/records.
+- No product can guarantee zero vulnerabilities. Keep software patched and run tests before releasing.
+- Do not automatically delete acceptance/rejection mail, accept offers, send messages, change events, or submit applications. These writes are not implemented yet and require an explicit approval workflow.
+- WhatsApp personal chat history is not available through a general official consumer API. JARVIS only supports user-managed relationship reminders and notes.
 
 ## Validation
 
-GitHub Actions has separate workflows for Android APK builds and backend tests. Download the APK only from a successful **Build JARVIS APK** run under **Artifacts**. Backend tests run on changes to `backend/**` and `tests/**`.
+- Backend tests: [Test JARVIS backend](https://github.com/mekkedemirov21-rgb/jarvis.ai/actions/workflows/test-backend.yml)
+- Android packaging: [Build JARVIS APK](https://github.com/mekkedemirov21-rgb/jarvis.ai/actions/workflows/build-apk.yml)
+- Download APK only from a successful run's `JARVIS-debug-APK` artifact.
