@@ -109,7 +109,7 @@ class NotificationWorker(context: Context, params: WorkerParameters) : Worker(co
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             manager.createNotificationChannel(
                 NotificationChannel(CHANNEL_ID, "JARVIS Hinweise", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                    description = "Neutrale Hinweise aus deinem privaten JARVIS-Companion."
+                    this.description = "Neutrale Hinweise aus deinem privaten JARVIS-Companion."
                     setShowBadge(true)
                 }
             )
