@@ -15,6 +15,10 @@ JARVIS is a privacy-oriented personal assistant with an Android client and a loc
 
 For detailed model comparisons, setup choices, providers and the current feature boundary, read [AI Models and Integrations](docs/AI_MODELS_AND_INTEGRATIONS.md), [Architecture](docs/ARCHITECTURE.md), [Product Specification](docs/PRODUCT_SPEC.md), and [Security](docs/SECURITY.md).
 
+## Run JARVIS directly on an Android phone (experimental)
+
+The Android APK can run against a local companion in Termux on the same phone. See [Galaxy local setup](docs/GALAXY_LOCAL_SETUP.md). In this mode, the APK allows HTTP only to `127.0.0.1`; all non-loopback server connections still require HTTPS. The small Qwen3.5 0.8B model is a low-resource starting point and is much less capable than a larger PC model.
+
 ## Recommended free local model
 
 Start with Ollama + Qwen3.5 4B:
