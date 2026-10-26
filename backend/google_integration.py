@@ -195,3 +195,14 @@ def triage_mail(max_results: int = Query(20, ge=1, le=30)) -> dict:
         raise HTTPException(502, "Local model returned an error.") from exc
     except (json.JSONDecodeError, TypeError, ValueError) as exc:
         raise HTTPException(502, "Local model returned invalid triage JSON; no action was taken.") from exc
+
+
+@router.delete("/api/google/disconnect-local", dependencies=[Depends(require_api_token)])
+def disconnect_google_local() -> dict:
+    """Remove the locally stored encrypted token. Revoke app access separately in the Google account security settings."""
+    existed = TOKEN_FILE.is_file()
+    if existed:
+        TOKEN_FILE.unlink()
+    return {"disconnectedLocally": True, "tokenRemoved": existed,
+            "providerGrantRevoked": False,
+            "note": "To revoke the provider-side grant too, remove JARVIS under your Google Account's third-party connections."}
