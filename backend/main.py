@@ -260,3 +260,6 @@ async def job_search_links(q: str = Query(min_length=2, max_length=120), locatio
 # Optional Google read-only connector: disabled until its local OAuth file is configured.
 from backend.google_integration import router as google_router  # noqa: E402
 app.include_router(google_router)
+
+from backend.jobs import router as jobs_router  # noqa: E402
+app.include_router(jobs_router)
