@@ -62,7 +62,11 @@ class MainActivity : Activity() {
         window.statusBarColor = Color.rgb(5, 8, 12)
         window.navigationBarColor = Color.rgb(5, 8, 12)
         baseUrl = prefs.getString(KEY_BASE_URL, "").orEmpty()
-        if (isAllowedBaseUrl(baseUrl)) showDashboard() else if (!OllamaKeyVault.read(this).isNullOrBlank()) showOllamaChat() else showSetup()
+        val cloudSelected = cloudPrefs.getBoolean("selected_mode", false)
+        if (cloudSelected && !OllamaKeyVault.read(this).isNullOrBlank()) showOllamaChat()
+        else if (isAllowedBaseUrl(baseUrl)) showDashboard()
+        else if (!OllamaKeyVault.read(this).isNullOrBlank()) showOllamaChat()
+        else showSetup()
         requestNotificationPermissionIfNeeded()
     }
 
@@ -176,6 +180,7 @@ class MainActivity : Activity() {
                 return@button
             }
             baseUrl = candidate
+            cloudPrefs.edit().putBoolean("selected_mode", false).apply()
             prefs.edit().putString(KEY_BASE_URL, baseUrl).apply()
             NotificationWorker.schedule(this)
             showDashboard()
@@ -279,7 +284,7 @@ class MainActivity : Activity() {
             }
             try {
                 if (entered.isNotEmpty()) OllamaKeyVault.save(this, entered)
-                cloudPrefs.edit().putString("model_name", model).apply()
+                cloudPrefs.edit().putString("model_name", model).putBoolean("selected_mode", true).apply()
                 cloudMessages.clear()
                 showOllamaChat()
             } catch (_: Exception) {
