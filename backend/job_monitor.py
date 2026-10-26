@@ -33,6 +33,7 @@ if urlparse(OLLAMA_URL).hostname not in {"127.0.0.1", "localhost", "::1"}:
 def init_job_db() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS monitor_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         conn.execute("""CREATE TABLE IF NOT EXISTS job_watches (
             id TEXT PRIMARY KEY, encrypted_payload TEXT NOT NULL,
             created_at INTEGER NOT NULL, active INTEGER NOT NULL DEFAULT 1
