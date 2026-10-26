@@ -13,6 +13,8 @@ TEST_ROOT = Path(tempfile.mkdtemp(prefix="jarvis-tests-"))
 os.environ["JARVIS_DATA_DIR"] = str(TEST_ROOT / "data")
 os.environ["JARVIS_VAULT_PATH"] = str(TEST_ROOT / "vault")
 os.environ["OLLAMA_BASE_URL"] = "http://127.0.0.1:11434"
+os.environ.pop("ADZUNA_APP_ID", None)
+os.environ.pop("ADZUNA_APP_KEY", None)
 
 from fastapi.testclient import TestClient  # noqa: E402
 from backend.main import app, DB_PATH, VAULT_DIR  # noqa: E402
@@ -90,3 +92,21 @@ def test_memory_note_is_written_to_local_obsidian_markdown() -> None:
     assert note_path.exists()
     assert note_path.suffix == ".md"
     assert "Only local test content." in note_path.read_text(encoding="utf-8")
+
+
+def test_dashboard_is_served_from_local_api() -> None:
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "JARVIS" in response.text
+    assert "localStorage" not in response.text
+
+
+def test_job_search_falls_back_to_authorized_source_links_without_keys() -> None:
+    response = client.get("/api/jobs/search", params={"q": "Python Entwickler", "location": "Sinsheim"}, headers=AUTH)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["configured"] is False
+    assert body["results"] == []
+    assert {source["name"] for source in body["searchLinks"]} == {
+        "Indeed", "Bundesagentur für Arbeit", "LinkedIn Jobs"
+    }
