@@ -192,23 +192,37 @@ async def create_memory(note: MemoryNote) -> dict:
 
 @app.post("/api/approvals", dependencies=[Depends(require_api_token)])
 async def propose_action(proposal: Proposal) -> dict:
-    """Create a review item. This does not execute the proposed action."""
+    """Create an encrypted review item; proposing never triggers external side effects."""
     init_db()
+    payload = proposal.payload
+    supported_google_actions = {"email_draft", "email_send", "calendar_create", "calendar_update"}
+    if proposal.action_type in supported_google_actions:
+        from backend.google_integration import validate_google_action_payload
+        payload = validate_google_action_payload(proposal.action_type, payload)
+
     item_id = uuid.uuid4().hex
-    encrypted = encrypt_text(json.dumps({"summary": proposal.summary, "payload": proposal.payload}, ensure_ascii=False))
+    encrypted = encrypt_text(json.dumps({"summary": proposal.summary, "payload": payload}, ensure_ascii=False))
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute(
             "INSERT INTO approvals(id, action_type, encrypted_payload, status, created_at) VALUES (?, ?, ?, 'pending', ?)",
             (item_id, proposal.action_type, encrypted, int(time.time())),
         )
         conn.commit()
-    return {"id": item_id, "actionType": proposal.action_type, "status": "pending", "execution": "not-implemented"}
+    return {
+        "id": item_id,
+        "actionType": proposal.action_type,
+        "status": "pending",
+        "executionStatus": "not_requested",
+        "executionSupported": proposal.action_type in supported_google_actions,
+        "note": "Freigabe und Ausführung sind zwei getrennte Schritte. Das Modell kann Aktionen nicht selbst ausführen."
+    }
 
 
 @app.get("/api/approvals", dependencies=[Depends(require_api_token)])
-async def list_approvals(status: Literal["pending", "approved", "rejected"] | None = Query(default="pending")) -> dict:
+async def list_approvals(status: Literal["pending", "approved", "rejected"] | None = Query(default=None)) -> dict:
     init_db()
-    query = "SELECT id, action_type, encrypted_payload, status, created_at, decided_at FROM approvals"
+    query = ("SELECT id, action_type, encrypted_payload, status, created_at, decided_at, "
+             "execution_status, execution_result, executed_at FROM approvals")
     params: tuple = ()
     if status:
         query += " WHERE status = ?"
@@ -216,20 +230,34 @@ async def list_approvals(status: Literal["pending", "approved", "rejected"] | No
     query += " ORDER BY created_at DESC LIMIT 100"
     with sqlite3.connect(DB_PATH) as conn:
         rows = conn.execute(query, params).fetchall()
+    supported = {"email_draft", "email_send", "calendar_create", "calendar_update"}
     items = []
     for row in rows:
         decoded = json.loads(decrypt_text(row[2]))
+        try:
+            execution_result = json.loads(row[7]) if row[7] else None
+        except (json.JSONDecodeError, TypeError):
+            execution_result = None
         items.append({
-            "id": row[0], "actionType": row[1], "summary": decoded["summary"],
-            "payload": decoded["payload"], "status": row[3], "createdAt": row[4], "decidedAt": row[5],
-            "execution": "not-implemented",
+            "id": row[0],
+            "actionType": row[1],
+            "summary": decoded["summary"],
+            "payload": decoded["payload"],
+            "status": row[3],
+            "createdAt": row[4],
+            "decidedAt": row[5],
+            "executionStatus": row[6],
+            "executionResult": execution_result,
+            "executedAt": row[8],
+            "executionSupported": row[1] in supported,
+            "execution": "two_step_google_action" if row[1] in supported else "not_implemented",
         })
     return {"items": items}
 
 
 @app.post("/api/approvals/{item_id}/decision", dependencies=[Depends(require_api_token)])
 async def decide_approval(item_id: str, decision: Decision) -> dict:
-    """Record user's decision only; never execute side effects in this endpoint."""
+    """Record a review decision only; approving does not trigger a side effect."""
     init_db()
     new_status = "approved" if decision.decision == "approve" else "rejected"
     with sqlite3.connect(DB_PATH) as conn:
@@ -240,9 +268,112 @@ async def decide_approval(item_id: str, decision: Decision) -> dict:
         conn.commit()
     if cursor.rowcount != 1:
         raise HTTPException(status_code=404, detail="Pending approval not found.")
-    return {"id": item_id, "status": new_status, "execution": "not-implemented"}
+    return {
+        "id": item_id,
+        "status": new_status,
+        "executionStatus": "not_requested",
+        "requiresSeparateExecutionConfirmation": decision.decision == "approve",
+        "note": "No external action was performed."
+    }
 
 
+@app.post("/api/approvals/{item_id}/execute", dependencies=[Depends(require_api_token)])
+async def execute_approval(item_id: str) -> dict:
+    """Execute a supported action only after approval and an explicit second request.
+
+    The 15-minute approval window and an atomic execution claim reduce the risk
+    of stale approvals and duplicate side effects. Failed/uncertain attempts are
+    not automatically retried because the remote provider may have processed them.
+    """
+    init_db()
+    supported = {"email_draft", "email_send", "calendar_create", "calendar_update"}
+
+    with sqlite3.connect(DB_PATH) as conn:
+        row = conn.execute(
+            "SELECT action_type, encrypted_payload, status, decided_at, execution_status "
+            "FROM approvals WHERE id = ?", (item_id,)
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Approval item not found.")
+    action_type, encrypted_payload, status, decided_at, execution_status = row
+    if status != "approved":
+        raise HTTPException(status_code=409, detail="Approve this proposal first.")
+    if action_type not in supported:
+        raise HTTPException(status_code=409, detail="This action is not executable. Job applications still require manual submission.")
+    if execution_status != "not_requested":
+        raise HTTPException(status_code=409, detail="This action already has an execution attempt or result; it will not be retried automatically.")
+    if not decided_at or int(time.time()) - int(decided_at) > 900:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute(
+                "UPDATE approvals SET execution_status = 'expired' WHERE id = ? AND execution_status = 'not_requested'",
+                (item_id,),
+            )
+            conn.commit()
+        raise HTTPException(status_code=410, detail="Approval expired. Create a fresh proposal and review its contents again.")
+
+    decoded = json.loads(decrypt_text(encrypted_payload))
+    payload = decoded["payload"]
+
+    # Preflight before claiming the action so a missing setting/scope does not consume the approval.
+    from backend.google_integration import ensure_google_write_ready, execute_google_action
+    ensure_google_write_ready()
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        latest = conn.execute(
+            "SELECT status, decided_at, execution_status FROM approvals WHERE id = ?", (item_id,)
+        ).fetchone()
+        if not latest or latest[0] != "approved" or latest[2] != "not_requested":
+            conn.rollback()
+            raise HTTPException(status_code=409, detail="Approval was changed or claimed by another request.")
+        if not latest[1] or int(time.time()) - int(latest[1]) > 900:
+            conn.execute(
+                "UPDATE approvals SET execution_status = 'expired' WHERE id = ? AND execution_status = 'not_requested'",
+                (item_id,),
+            )
+            conn.commit()
+            raise HTTPException(status_code=410, detail="Approval expired. Create a fresh proposal.")
+        cursor = conn.execute(
+            "UPDATE approvals SET execution_status = 'in_progress' WHERE id = ? AND execution_status = 'not_requested'",
+            (item_id,),
+        )
+        if cursor.rowcount != 1:
+            conn.rollback()
+            raise HTTPException(status_code=409, detail="Action is already in progress or has been attempted.")
+        conn.commit()
+
+    try:
+        result = await asyncio.to_thread(execute_google_action, action_type, payload)
+    except HTTPException as exc:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute(
+                "UPDATE approvals SET execution_status = 'failed', execution_result = ?, executed_at = ? WHERE id = ?",
+                (json.dumps({"message": "Provider rejected the action; inspect the destination before retrying."}), int(time.time()), item_id),
+            )
+            conn.commit()
+        raise exc
+    except Exception as exc:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute(
+                "UPDATE approvals SET execution_status = 'failed', execution_result = ?, executed_at = ? WHERE id = ?",
+                (json.dumps({"message": "Outcome uncertain; inspect the provider before creating a new action."}), int(time.time()), item_id),
+            )
+            conn.commit()
+        raise HTTPException(
+            status_code=502,
+            detail="Action execution failed or its outcome is uncertain. JARVIS will not retry automatically; inspect Google before creating a new action."
+        ) from exc
+
+    now = int(time.time())
+    # Store only provider object IDs / links, not the email body or full calendar payload.
+    safe_result = {k: v for k, v in result.items() if k in {"kind", "draftId", "messageId", "eventId", "htmlLink", "created", "updated", "sent"}}
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            "UPDATE approvals SET execution_status = 'executed', execution_result = ?, executed_at = ? WHERE id = ? AND execution_status = 'in_progress'",
+            (json.dumps(safe_result, ensure_ascii=False), now, item_id),
+        )
+        conn.commit()
+    return {"id": item_id, "status": "approved", "executionStatus": "executed", "result": safe_result}
 @app.get("/api/jobs/search-links", dependencies=[Depends(require_api_token)])
 async def job_search_links(q: str = Query(min_length=2, max_length=120), location: str = Query(default="Deutschland", max_length=100)) -> dict:
     """Build normal human-operated job-board links; does not scrape pages or auto-apply."""
