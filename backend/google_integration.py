@@ -1,6 +1,8 @@
 """Optional read-only Google OAuth connector. Tokens are encrypted locally."""
 from __future__ import annotations
-import json, os, time
+import base64, json, os, re, time
+from email.message import EmailMessage
+from email.utils import parseaddr
 import httpx
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,7 +21,10 @@ ROOT = Path(__file__).resolve().parents[1]
 CLIENT_FILE = Path(os.getenv("GOOGLE_OAUTH_CLIENT_FILE", str(ROOT / ".secrets" / "google-oauth-client.json"))).resolve()
 TOKEN_FILE = Path(os.getenv("JARVIS_DATA_DIR", str(ROOT / "backend" / "data"))).resolve() / "google-token.enc"
 REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://127.0.0.1:8765/oauth/google/callback")
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/calendar.events.readonly"]
+READ_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/calendar.events.readonly"]
+WRITE_SCOPES = ["https://www.googleapis.com/auth/gmail.compose", "https://www.googleapis.com/auth/calendar.events"]
+GOOGLE_WRITES_ENABLED = os.getenv("JARVIS_ENABLE_GOOGLE_WRITES", "false").strip().lower() in {"1", "true", "yes", "on"}
+SCOPES = READ_SCOPES + WRITE_SCOPES if GOOGLE_WRITES_ENABLED else READ_SCOPES
 _flows: dict[str, tuple[float, Flow]] = {}
 
 def new_flow() -> tuple[str, Flow]:
@@ -48,7 +53,13 @@ def get_credentials() -> Credentials:
         raise HTTPException(409, "Google account is not connected yet.")
     try:
         info = json.loads(decrypt_text(TOKEN_FILE.read_text(encoding="utf-8")))
-        creds = Credentials.from_authorized_user_info(info, scopes=SCOPES)
+        granted_scopes = set(info.get("scopes") or [])
+        if not set(SCOPES).issubset(granted_scopes):
+            raise HTTPException(
+                409,
+                "Google token lacks the requested scopes. Disconnect locally, confirm the scope settings in .env, then reconnect Google and grant the newly requested access."
+            )
+        creds = Credentials.from_authorized_user_info(info)
         if creds.expired and creds.refresh_token:
             creds.refresh(GoogleRequest())
             save_credentials(creds)
@@ -72,8 +83,12 @@ def google_client(api: str, version: str) -> Any:
 async def oauth_start() -> dict:
     url, flow = new_flow()
     # State is kept in the in-memory Flow map, not exposed as a reusable secret.
-    return {"authorizationUrl": url, "redirectUri": REDIRECT_URI, "scopes": SCOPES,
-            "access": "read-only", "note": "Email/calendar content is processed locally after you consent."}
+    return {
+        "authorizationUrl": url, "redirectUri": REDIRECT_URI, "scopes": SCOPES,
+        "access": "read-write" if GOOGLE_WRITES_ENABLED else "read-only",
+        "writesEnabled": GOOGLE_WRITES_ENABLED,
+        "note": "Only explicitly approved actions can be executed; no action is triggered by email content or the model alone."
+    }
 
 @router.get("/oauth/google/callback", response_class=HTMLResponse)
 async def oauth_callback(request: Request) -> HTMLResponse:
