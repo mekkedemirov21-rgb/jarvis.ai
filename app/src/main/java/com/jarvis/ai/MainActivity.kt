@@ -100,7 +100,7 @@ class MainActivity : Activity() {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             setSingleLine(true); textSize = 13f
             setTextColor(Color.rgb(235, 246, 255)); setHintTextColor(Color.rgb(95, 116, 134))
-            setPadding(dp(12), dp(12), dp(12), dp(12)); setText(baseUrl)
+            setPadding(dp(12), dp(12), dp(12), dp(12)); setText(baseUrl.ifBlank { "http://127.0.0.1:8765" })
             background = inputBackground()
             contentDescription = "Adresse des JARVIS Companion; HTTP nur für 127.0.0.1"
         }
