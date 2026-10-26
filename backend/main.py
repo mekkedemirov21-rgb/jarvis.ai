@@ -55,9 +55,22 @@ def init_db() -> None:
                 encrypted_payload TEXT NOT NULL,
                 status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')),
                 created_at INTEGER NOT NULL,
-                decided_at INTEGER
+                decided_at INTEGER,
+                execution_status TEXT NOT NULL DEFAULT 'not_requested',
+                execution_result TEXT,
+                executed_at INTEGER
             )"""
         )
+        # Migrate local databases created by earlier JARVIS versions.
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(approvals)").fetchall()}
+        migrations = {
+            "execution_status": "ALTER TABLE approvals ADD COLUMN execution_status TEXT NOT NULL DEFAULT 'not_requested'",
+            "execution_result": "ALTER TABLE approvals ADD COLUMN execution_result TEXT",
+            "executed_at": "ALTER TABLE approvals ADD COLUMN executed_at INTEGER",
+        }
+        for name, statement in migrations.items():
+            if name not in columns:
+                conn.execute(statement)
         conn.commit()
 
 
@@ -88,7 +101,7 @@ class MemoryNote(BaseModel):
 
 
 class Proposal(BaseModel):
-    action_type: Literal["email_send", "calendar_create", "calendar_update", "job_application", "relationship_reminder"]
+    action_type: Literal["email_draft", "email_send", "calendar_create", "calendar_update", "job_application", "relationship_reminder"]
     summary: str = Field(min_length=1, max_length=300)
     payload: dict = Field(default_factory=dict)
 
