@@ -10,7 +10,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Literal
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode
 
 import httpx
 from dotenv import load_dotenv
@@ -18,29 +18,26 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from backend.security import decrypt_text, encrypt_text, require_api_token
+from backend.llm import (LLM_MODEL, LLM_PROVIDER, LocalModelError, LocalModelTimeout, LocalModelUnavailable, chat_async, provider_status)
 
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / ".env")
 
 APP_NAME = "JARVIS Local Companion"
-MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:4b")
-OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
+MODEL = LLM_MODEL
 HOST = os.getenv("JARVIS_HOST", "127.0.0.1")
 PORT = int(os.getenv("JARVIS_PORT", "8765"))
 DATA_DIR = Path(os.getenv("JARVIS_DATA_DIR", str(ROOT / "backend" / "data"))).resolve()
 VAULT_DIR = Path(os.getenv("JARVIS_VAULT_PATH", str(DATA_DIR / "vault"))).resolve()
 DB_PATH = DATA_DIR / "jarvis.sqlite3"
 
-# A deliberate safety check: never allow the local model service to be pointed at an arbitrary host.
-if urlparse(OLLAMA_URL).hostname not in {"127.0.0.1", "localhost", "::1"}:
-    raise RuntimeError("OLLAMA_BASE_URL must point to loopback (127.0.0.1/localhost/::1).")
 
 app = FastAPI(
     title=APP_NAME,
     version="0.1.0",
     description=(
-        "Local-only foundation. Chat is sent to a local Ollama server; prompts are not persisted. "
-        "This API does not send email, edit calendars, submit applications, or access WhatsApp."
+        "Local-only foundation. Chat is sent to a loopback Ollama or LM Studio server; prompts are not persisted by this API. "
+        "This API does not send email, edit calendars, submit applications, or access private WhatsApp chats."
     ),
     docs_url="/docs",
     redoc_url=None,
@@ -103,13 +100,13 @@ class Decision(BaseModel):
 @app.get("/health")
 async def health() -> dict:
     """Minimal readiness endpoint; deliberately does not disclose machine or account details."""
-    return {"status": "ok", "service": APP_NAME, "model": MODEL, "mode": "local-only"}
+    return {"status": "ok", "service": APP_NAME, "model": MODEL, "provider": LLM_PROVIDER, "mode": "local-only"}
 
 
 @app.get("/api/integrations/status", dependencies=[Depends(require_api_token)])
 async def integration_status() -> dict:
     return {
-        "llm": {"status": "configured-local", "provider": "Ollama", "model": MODEL},
+        "llm": {"status": "configured-local", **provider_status()},
         "memory": {"status": "local-markdown-vault", "format": "Obsidian-compatible Markdown"},
         "approvals": {"status": "local-queue", "payloadEncryption": "AES-256-GCM"},
         "emailMonitor": {"status": "enabled" if os.getenv("JARVIS_ENABLE_EMAIL_MONITOR", "false").strip().lower() in {"1", "true", "yes", "on"} else "disabled-by-default", "requiresGoogleOAuth": True, "actions": "notifications-only; no writes"},
@@ -123,7 +120,7 @@ async def integration_status() -> dict:
 
 @app.post("/api/chat", dependencies=[Depends(require_api_token)])
 async def chat(request: ChatRequest) -> dict:
-    """Run a non-persistent conversation with local Ollama; no tools/actions are exposed to the model."""
+    """Run a non-persistent conversation with the configured local model; no tools/actions are exposed."""
     messages = [
         {
             "role": "system",
@@ -139,24 +136,15 @@ async def chat(request: ChatRequest) -> dict:
     ]
     messages.extend([m.model_dump() for m in request.messages])
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=3.0)) as client:
-            response = await client.post(
-                f"{OLLAMA_URL}/api/chat",
-                json={"model": MODEL, "messages": messages, "stream": False},
-            )
-            response.raise_for_status()
-            result = response.json()
-    except httpx.ConnectError as exc:
-        raise HTTPException(status_code=503, detail="Ollama is not available on this device.") from exc
-    except httpx.TimeoutException as exc:
+        content = await chat_async(messages, timeout=120.0)
+    except LocalModelUnavailable as exc:
+        raise HTTPException(status_code=503, detail="The selected local model server is not available.") from exc
+    except LocalModelTimeout as exc:
         raise HTTPException(status_code=504, detail="The local model timed out.") from exc
-    except httpx.HTTPStatusError as exc:
+    except LocalModelError as exc:
         raise HTTPException(status_code=502, detail="The local model returned an error.") from exc
-    content = result.get("message", {}).get("content")
-    if not isinstance(content, str):
-        raise HTTPException(status_code=502, detail="Unexpected response from local model.")
-    # Deliberately don't write prompts or completions to logs/database.
-    return {"reply": content, "model": MODEL, "stored": False, "toolsEnabled": False}
+    # Deliberately don't write prompts or completions to API logs/database.
+    return {"reply": content, "model": MODEL, "provider": LLM_PROVIDER, "stored": False, "toolsEnabled": False}
 
 
 def _slug(text: str) -> str:
