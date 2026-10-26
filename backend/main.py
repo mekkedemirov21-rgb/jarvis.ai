@@ -1,6 +1,7 @@
 """Local-first JARVIS service; no actions run without a separate trusted integration."""
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -111,6 +112,7 @@ async def integration_status() -> dict:
         "llm": {"status": "configured-local", "provider": "Ollama", "model": MODEL},
         "memory": {"status": "local-markdown-vault", "format": "Obsidian-compatible Markdown"},
         "approvals": {"status": "local-queue", "payloadEncryption": "AES-256-GCM"},
+        "emailMonitor": {"status": "enabled" if os.getenv("JARVIS_ENABLE_EMAIL_MONITOR", "false").strip().lower() in {"1", "true", "yes", "on"} else "disabled-by-default", "requiresGoogleOAuth": True, "actions": "notifications-only; no writes"},
         "gmail": {"status": "read-only-connected" if (DATA_DIR / "google-token.enc").is_file() else "not-configured", "note": "Read-only OAuth connector; consent required"},
         "googleCalendar": {"status": "read-only-connected" if (DATA_DIR / "google-token.enc").is_file() else "not-configured", "note": "Read-only OAuth connector; consent required"},
         "jobSearch": {"status": "adzuna-api-configured" if (os.getenv("ADZUNA_APP_ID", "").strip() and os.getenv("ADZUNA_APP_KEY", "").strip()) else "search-links-only", "note": "Uses Adzuna only when local API keys are configured; no job-board scraping or automatic applications"},
@@ -275,3 +277,37 @@ async def dashboard() -> FileResponse:
 
 from backend.relationship import router as relationship_router  # noqa: E402
 app.include_router(relationship_router)
+
+from backend.monitor import router as monitor_router, ENABLED as EMAIL_MONITOR_ENABLED, POLL_SECONDS as EMAIL_MONITOR_POLL_SECONDS, monitor_once  # noqa: E402
+app.include_router(monitor_router)
+
+_email_monitor_task: asyncio.Task | None = None
+
+async def _email_monitor_loop() -> None:
+    """Opt-in scheduler; only runs on this host while the companion service is running."""
+    while True:
+        try:
+            await asyncio.to_thread(monitor_once)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # Never log mailbox content, tokens or third-party exception details.
+            pass
+        await asyncio.sleep(EMAIL_MONITOR_POLL_SECONDS)
+
+@app.on_event("startup")
+async def start_optional_email_monitor() -> None:
+    global _email_monitor_task
+    if EMAIL_MONITOR_ENABLED and _email_monitor_task is None:
+        _email_monitor_task = asyncio.create_task(_email_monitor_loop())
+
+@app.on_event("shutdown")
+async def stop_optional_email_monitor() -> None:
+    global _email_monitor_task
+    if _email_monitor_task is not None:
+        _email_monitor_task.cancel()
+        try:
+            await _email_monitor_task
+        except asyncio.CancelledError:
+            pass
+        _email_monitor_task = None
