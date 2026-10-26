@@ -25,7 +25,7 @@ User-owned PC / home server
   │    ├─ hashed IDs for monitored messages/listings
   │    └─ encrypted monitor-alert payloads
   ├─ local Markdown vault (Obsidian-compatible; plaintext on disk)
-  ├─ optional Google OAuth (Gmail / Calendar, read-only)
+  ├─ optional Google OAuth (read-only by default; opt-in write scopes for drafts/send and calendar create/update)
   ├─ optional scheduled email triage and job matching
   └─ external job provider API and ordinary job-search links
 ```
@@ -38,18 +38,18 @@ The public repository must contain source only. Never commit `.env`, OAuth clien
 |---|---|---|
 | Android companion client | Implemented; requires reachable HTTPS endpoint | No insecure HTTP, no embedded API secret; API token is Android-Keystore encrypted |
 | Local AI chat | Implemented for Ollama and LM Studio | No model tools; prompt/reply not intentionally persisted by the API |
-| Memory | Local Markdown create/list, Obsidian-compatible | Markdown note content is plaintext; enable full-disk encryption |
-| Gmail read | Optional Google OAuth | Read-only `gmail.readonly` scope |
-| Calendar read | Optional Google OAuth | Read-only `calendar.events.readonly` scope |
+| Memory | Obsidian-compatible local Markdown notes plus keyword-retrieval into chat | Only a few lexically relevant excerpts are inserted; notes remain plaintext on disk |
+| Gmail read | Optional Google OAuth | Read-only `gmail.readonly` scope by default |
+| Calendar read | Optional Google OAuth | Read-only `calendar.events.readonly` scope by default |
 | Email classification | Manual triage and opt-in monitor | Model proposes categories; no send/delete/archive/accept/reject |
 | Job search | Optional Adzuna API + human-operated links | No Indeed scraping; listing text is untrusted |
 | Job-fit evaluation | User profile and listing evaluated with local LLM | No application submitted; matching can be wrong |
 | Scheduled job monitor | Optional, configured watches and encrypted alerts | No automatic applications |
 | Relationship reminders | Create/list/cancel reminders; encrypted content | User provides notes; no private WhatsApp read access |
 | Android alert notifications | Periodic WorkManager poll (minimum 15 minutes; Android may delay) | Generic message text, not mailbox subject/content; requires network and permission |
-| Approval queue | Stores proposal and user decision | Approval does **not** execute an external action yet |
-| Send/edit/delete email or calendar events | Not implemented | No write token scope requested |
-| Automatic application submission | Not implemented | Human review required |
+| Approval queue | Encrypted proposals, decision and execution status | Google actions require proposal review, approval, then a separate execute request; 15-minute approval expiry, no automatic retries |
+| Gmail draft/send | Implemented behind `JARVIS_ENABLE_GOOGLE_WRITES=true` | Requires a fresh OAuth grant for `gmail.compose`, a validated one-recipient payload, and two separate user confirmations; no delete action |
+| Calendar create/update | Implemented behind `JARVIS_ENABLE_GOOGLE_WRITES=true` | Requires a fresh OAuth grant for `calendar.events`, explicit payload preview, approval, and separate execution |\n| Automatic application submission | Not implemented | Human review required; no Indeed scraping |
 | Read personal WhatsApp chat history | Not implemented / no general official consumer API | No QR/session scraping or covert import |
 | True application-layer end-to-end encryption from Android to model | Not implemented | HTTPS protects transport; local model/companion must see plaintext to process |
 
@@ -94,9 +94,9 @@ If you authorize Google from the phone through this HTTPS endpoint, set `GOOGLE_
 
 ## Development roadmap
 
-1. **Foundation and tests (current):** local model abstraction, secure local companion, read-only Google connector, local memory, job matching, relationship reminders, approval queue and Android notifications.
+1. **Foundation and tests (current):** local model abstraction, secure local companion, Google read-only by default with opt-in draft/send/calendar writes, keyword-based memory retrieval, job matching, relationship reminders, approval queue and Android notifications.
 2. **Reliability before autonomy:** test matrix for German emails and jobs; audit log for proposed actions; retention settings; export/delete workflow; OAuth-expiry handling; backup and recovery tests.
-3. **Controlled writes:** only after explicit action design, least-privilege OAuth scopes, preview of exact payload, replay/idempotency guards, approval expiry and rollback support. Never use one broad permission for convenience.
+3. **Controlled writes (first stage implemented for Google):** Gmail draft/send and calendar create/update are available only with opt-in scopes, exact preview, approval plus separate execute request, a 15-minute expiry and no automatic retries. Broader error recovery, stronger idempotency, undo/rollback and public-app OAuth review remain before considering a general release. Never use one broad permission for convenience.
 4. **Security review:** rate-limit the local API, bind tokens to devices, review WebView/session handling, inspect dependencies/SBOM, threat model and independent penetration test.
 5. **Future real-time notifications:** choose a transport after threat-modeling. A cloud push provider may receive notification metadata and therefore requires separate privacy review. Current notifications use periodic polling and are not real-time.
 
