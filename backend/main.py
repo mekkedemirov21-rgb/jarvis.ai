@@ -255,3 +255,8 @@ async def job_search_links(q: str = Query(min_length=2, max_length=120), locatio
         "automation": "disabled",
         "note": "Review listings on the source website. Automatic scraping/application is intentionally not implemented.",
     }
+
+
+# Optional Google read-only connector: disabled until its local OAuth file is configured.
+from backend.google_integration import router as google_router  # noqa: E402
+app.include_router(google_router)
