@@ -15,6 +15,10 @@ JARVIS is a privacy-oriented personal assistant with an Android client and a loc
 
 For detailed model comparisons, setup choices, providers and the current feature boundary, read [AI Models and Integrations](docs/AI_MODELS_AND_INTEGRATIONS.md), [Architecture](docs/ARCHITECTURE.md), [Product Specification](docs/PRODUCT_SPEC.md), and [Security](docs/SECURITY.md).
 
+## Ollama Cloud chat and „Jarvis“-Wakeword in Android
+
+The Android app has an experimental direct Ollama Cloud chat path and a foreground-only on-device wake word. It stores the API key encrypted with Android Keystore. Ollama Free has limited monthly starter usage, not unlimited free API calls; see [Ollama Cloud Android guide](docs/OLLAMA_CLOUD_ANDROID.md) before use. Prompts are sent to Ollama Cloud, which states they are not used for training or logged, but are still processed in the cloud.
+
 ## Run JARVIS directly on an Android phone (experimental)
 
 The Android APK can run against a local companion in Termux on the same phone. See [Galaxy local setup](docs/GALAXY_LOCAL_SETUP.md). In this mode, the APK allows HTTP only to `127.0.0.1`; all non-loopback server connections still require HTTPS. The small Qwen3.5 0.8B model is a low-resource starting point and is much less capable than a larger PC model.
