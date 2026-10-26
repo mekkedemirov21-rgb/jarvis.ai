@@ -177,6 +177,12 @@ def validate_google_action_payload(action_type: str, payload: dict[str, Any]) ->
     raise HTTPException(422, "This action type has no supported Google execution handler.")
 
 
+def ensure_google_write_ready() -> None:
+    """Fail before an approval is marked in progress if Google writes are not configured."""
+    _require_write_access()
+    get_credentials()
+
+
 def execute_google_action(action_type: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Execute only after the caller has durably recorded an explicit user approval."""
     _require_write_access()
