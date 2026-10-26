@@ -272,3 +272,6 @@ from fastapi.responses import FileResponse  # noqa: E402
 async def dashboard() -> FileResponse:
     """Serve the local dashboard from the same loopback-only origin as the API."""
     return FileResponse(ROOT / "backend" / "web" / "index.html", media_type="text/html")
+
+from backend.relationship import router as relationship_router  # noqa: E402
+app.include_router(relationship_router)
