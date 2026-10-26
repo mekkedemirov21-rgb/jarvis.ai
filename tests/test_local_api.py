@@ -55,13 +55,14 @@ def test_approval_payload_is_encrypted_and_decision_does_not_execute() -> None:
     proposal = {
         "action_type": "email_send",
         "summary": "Confidential draft test",
-        "payload": {"body": "SENSITIVE_BODY_MARKER_98a1", "to": "person@example.test"},
+        "payload": {"body": "SENSITIVE_BODY_MARKER_98a1", "subject": "Test: approval only", "to": "person@example.test"},
     }
     created = client.post("/api/approvals", json=proposal, headers=AUTH)
     assert created.status_code == 200
     item_id = created.json()["id"]
     assert created.json()["status"] == "pending"
-    assert created.json()["execution"] == "not-implemented"
+    assert created.json()["executionStatus"] == "not_requested"
+    assert created.json()["executionSupported"] is True
 
     raw_db = DB_PATH.read_bytes()
     assert b"SENSITIVE_BODY_MARKER_98a1" not in raw_db
@@ -78,7 +79,8 @@ def test_approval_payload_is_encrypted_and_decision_does_not_execute() -> None:
     )
     assert decision.status_code == 200
     assert decision.json()["status"] == "approved"
-    assert decision.json()["execution"] == "not-implemented"
+    assert decision.json()["executionStatus"] == "not_requested"
+    assert decision.json()["requiresSeparateExecutionConfirmation"] is True
 
 
 def test_memory_note_is_written_to_local_obsidian_markdown() -> None:
@@ -141,3 +143,63 @@ def test_relationship_reminder_payload_is_encrypted_and_cancelable() -> None:
     deleted = client.delete(f"/api/reminders/{reminder_id}", headers=AUTH)
     assert deleted.status_code == 200
     assert deleted.json()["status"] == "cancelled"
+
+
+def test_google_write_execution_requires_opt_in_and_never_claims_approval(monkeypatch) -> None:
+    from backend import google_integration
+
+    monkeypatch.setattr(google_integration, "GOOGLE_WRITES_ENABLED", False)
+    proposal = {
+        "action_type": "email_draft",
+        "summary": "Encrypted draft preflight test",
+        "payload": {
+            "to": "person@example.test",
+            "subject": "Draft only",
+            "body": "This should never be sent in this test.",
+        },
+    }
+    created = client.post("/api/approvals", json=proposal, headers=AUTH)
+    assert created.status_code == 200
+    item_id = created.json()["id"]
+
+    decision = client.post(
+        f"/api/approvals/{item_id}/decision",
+        json={"decision": "approve"},
+        headers=AUTH,
+    )
+    assert decision.status_code == 200
+
+    executed = client.post(f"/api/approvals/{item_id}/execute", headers=AUTH)
+    assert executed.status_code == 409
+    assert "disabled" in executed.json()["detail"].lower()
+
+    listed = client.get("/api/approvals", headers=AUTH)
+    item = next(row for row in listed.json()["items"] if row["id"] == item_id)
+    assert item["status"] == "approved"
+    assert item["executionStatus"] == "not_requested"
+    assert item["payload"]["body"] == proposal["payload"]["body"]
+
+
+def test_email_action_payload_rejects_multiple_recipients_and_header_injection() -> None:
+    from fastapi import HTTPException
+    from backend.google_integration import validate_google_action_payload
+
+    try:
+        validate_google_action_payload("email_send", {
+            "to": "person@example.test,other@example.test",
+            "subject": "Hello",
+            "body": "A test message",
+        })
+        assert False, "Multiple recipients should be rejected."
+    except HTTPException as exc:
+        assert exc.status_code == 422
+
+    try:
+        validate_google_action_payload("email_send", {
+            "to": "person@example.test",
+            "subject": "Hello\\nBcc: other@example.test",
+            "body": "A test message",
+        })
+        assert False, "Header injection should be rejected."
+    except HTTPException as exc:
+        assert exc.status_code == 422
