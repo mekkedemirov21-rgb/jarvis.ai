@@ -1,35 +1,52 @@
 # JARVIS local assistant service
 
-This is the privacy-first service foundation for the Android JARVIS UI. The service is designed to run on the same computer as Ollama and bind to loopback only. It does not scrape job boards, send applications, access private WhatsApp chats, or connect to Gmail/Google Calendar until their official authorization flows are implemented.
+This local companion service runs on the same computer as Ollama. Run it on loopback only. The dashboard is served at `http://127.0.0.1:8765/`; API documentation is at `/docs`.
 
 ## Requirements
 
 - Python 3.11+
-- Ollama installed locally
-- A downloaded model, for example `ollama pull qwen3.5:4b`
+- Ollama installed locally and `ollama pull qwen3.5:4b` (or another supported local model)
+- Optional: Google OAuth Web client JSON for read-only Gmail/Calendar
+- Optional: Adzuna developer app ID/key for personal job search
 
 ## Start locally
 
 1. Copy `.env.example` to `.env` in the repository root.
-2. Generate an API token and put it in `JARVIS_API_TOKEN`. For example: `python -c "import secrets; print(secrets.token_urlsafe(48))"`
-3. Generate the AES-256 data key locally: `python -c "import base64,secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"`. Put the output in `JARVIS_DATA_KEY`. Keep this key safe; encrypted approval payloads cannot be decrypted if it is lost.
-4. Keep `.env` outside Git; never commit real credentials, keys, or private data.
-5. Install dependencies: `python -m pip install -r backend/requirements.txt`
-6. Start Ollama locally and ensure its API is available at `http://127.0.0.1:11434`.
-7. Run from the repository root: `python -m uvicorn backend.main:app --host 127.0.0.1 --port 8765`
-8. Open `http://127.0.0.1:8765/docs` locally. API endpoints except `/health` require `Authorization: Bearer <JARVIS_API_TOKEN>`.
+2. Generate a random API token: `python -c "import secrets; print(secrets.token_urlsafe(48))"`. Put it in `JARVIS_API_TOKEN`.
+3. Generate a separate AES-256 key: `python -c "import base64,secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"`. Put it in `JARVIS_DATA_KEY`.
+4. Replace both placeholders. The app intentionally refuses obvious placeholder values.
+5. Install dependencies: `python -m pip install -r backend/requirements.txt`.
+6. Ensure Ollama is available only at `http://127.0.0.1:11434`.
+7. Start from the repository root: `python -m uvicorn backend.main:app --host 127.0.0.1 --port 8765`.
+8. Open `http://127.0.0.1:8765/` and enter `JARVIS_API_TOKEN`. It is held only in the page's memory/input field; the dashboard does not use browser storage.
 
-The service refuses to start if either secret or key is missing. The API and Ollama should not be exposed to the Internet. The Markdown vault is plaintext for Obsidian interoperability: use full-disk encryption on the host. Approval payloads are AES-256-GCM encrypted in SQLite.
+Protected API calls use `Authorization: Bearer <JARVIS_API_TOKEN>`. `/health` is intentionally minimal.
 
-## Current capabilities
+## Optional Google read-only connector
 
-- Local Ollama chat endpoint, with no prompt-history persistence.
-- Local Markdown memory notes in an Obsidian-compatible vault folder.
-- A human approval queue for proposed actions. Approval records are encrypted and a decision is stored, but actions are not executed.
-- Safe external job-search links without scraping or auto-applying.
-- Integration status endpoint that openly reports unimplemented connectors.
-- Backend tests in GitHub Actions.
+1. In Google Cloud Console enable Gmail API and Google Calendar API.
+2. Configure OAuth consent, then create an OAuth **Web application** client.
+3. Add this exact authorized redirect URI: `http://127.0.0.1:8765/oauth/google/callback`.
+4. Save the downloaded client JSON as `.secrets/google-oauth-client.json`; the directory is ignored by Git.
+5. Restart JARVIS, open the dashboard and select **Google-Konto autorisieren**.
+6. Approve the read-only scopes: `gmail.readonly` and `calendar.events.readonly`.
 
-## Not implemented yet
+The encrypted token is stored under `backend/data/google-token.enc`. The API exposes recent email metadata/snippets, local-model triage, and upcoming calendar events. It has no send, delete, or calendar-write methods. To remove the local token, call `DELETE /api/google/disconnect-local` or remove the local data file. Also revoke JARVIS under Google Account third-party connections if you want to revoke the provider grant.
 
-Gmail/Google Calendar OAuth, scheduled mailbox monitoring, push notifications, trusted device pairing, OS keychain-backed secret storage, integration execution, and Android-to-companion networking all require additional implementation and user-provided OAuth setup. No credentials belong in this public repository.
+Google may require restricted-scope verification before a public app can be distributed broadly. Use test accounts while developing.
+
+## Optional personal job search
+
+Register at [Adzuna Developer](https://developer.adzuna.com/) and place your `app_id` and `app_key` in the ignored local `.env` as `ADZUNA_APP_ID` and `ADZUNA_APP_KEY`. Adzuna's terms permit personal job search under its free/evaluation tier, subject to its current limits and terms. Without keys, the app shows normal search links for Indeed, Bundesagentur für Arbeit and LinkedIn.
+
+No job-board scraping or automatic application submissions are implemented.
+
+## Current behavior and limits
+
+- Local Ollama chat is not intentionally persisted and exposes no tools to the model.
+- Job-fit analysis sends the supplied profile/description only to local Ollama and does not save the inputs.
+- Markdown memory notes are local plaintext for Obsidian interoperability; enable full-disk encryption.
+- Approval payloads and Google OAuth token files are encrypted with AES-256-GCM, but external action execution is not implemented.
+- Email triage is manually triggered. It classifies snippets and returns a suggestion; it cannot notify in the background when the dashboard is closed.
+- Gmail/Calendar writes, background monitoring, mobile push notifications, secure Android-to-companion pairing, OS keychain integration and access to personal WhatsApp chat history are not implemented.
+- Never expose the API or Ollama to the LAN/Internet or place credentials or personal data in this public repository.
