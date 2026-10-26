@@ -96,8 +96,16 @@ class NotificationWorker(context: Context, params: WorkerParameters) : Worker(co
             val id = item.optString("id").takeIf { it.isNotBlank() } ?: continue
             val description = when {
                 isReminder -> "Eine persönliche Erinnerung ist fällig."
-                item.has("category") -> "Ein Bewerbungshinweis sollte geprüft werden."
-                else -> "Es gibt neue passende Stellen zum Prüfen."
+                item.has("category") -> when (item.optString("category")) {
+                    "job_offer" -> "Mögliche Job-Zusage erkannt. Bitte die E-Mail und Bedingungen prüfen."
+                    "job_rejection" -> "Mögliche Bewerbungsabsage erkannt. Bitte die E-Mail prüfen."
+                    "interview" -> "Mögliche Interview-Einladung erkannt. Bitte Termin und Details prüfen."
+                    "job_application_update" -> "Ein Bewerbungs-Update wurde erkannt. Bitte die E-Mail prüfen."
+                    else -> "Ein Bewerbungshinweis sollte geprüft werden."
+                }
+                item.optString("recommendation") == "apply" -> "JARVIS empfiehlt, diese Stelle zu prüfen. Es wurde keine Bewerbung versendet."
+                item.optString("recommendation") == "review" -> "Eine passende Stelle braucht deine manuelle Prüfung. Es wurde keine Bewerbung versendet."
+                else -> "Es gibt einen neuen JARVIS-Hinweis. Bitte öffne die App für Details."
             }
             output.add(id to description)
         }
