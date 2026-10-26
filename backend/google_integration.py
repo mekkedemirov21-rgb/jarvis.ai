@@ -79,6 +79,155 @@ def google_client(api: str, version: str) -> Any:
     except Exception as exc:
         raise HTTPException(502, f"Could not initialize Google {api} client.") from exc
 
+def _require_write_access() -> None:
+    if not GOOGLE_WRITES_ENABLED:
+        raise HTTPException(
+            409,
+            "Google write actions are disabled. Set JARVIS_ENABLE_GOOGLE_WRITES=true locally, restart JARVIS, reconnect Google, and explicitly grant the requested scopes."
+        )
+
+
+def _email_payload(payload: dict[str, Any]) -> dict[str, str]:
+    if not isinstance(payload, dict):
+        raise HTTPException(422, "Email action payload must be an object.")
+    recipient = str(payload.get("to", "")).strip()
+    subject = str(payload.get("subject", "")).strip()
+    body = str(payload.get("body", "")).strip()
+    _, address = parseaddr(recipient)
+    # One recipient only; block display-list injection and mass sending.
+    if not address or address != recipient or not re.fullmatch(r"[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+", address):
+        raise HTTPException(422, "Provide exactly one valid recipient email address.")
+    if not subject or len(subject) > 200 or "\r" in subject or "\n" in subject:
+        raise HTTPException(422, "Subject must be 1–200 characters and contain no line breaks.")
+    if not body or len(body) > 20000:
+        raise HTTPException(422, "Email body must contain 1–20000 characters.")
+    return {"to": address, "subject": subject, "body": body}
+
+
+def _email_raw(payload: dict[str, Any]) -> str:
+    normalized = _email_payload(payload)
+    message = EmailMessage()
+    message["To"] = normalized["to"]
+    message["Subject"] = normalized["subject"]
+    message.set_content(normalized["body"])
+    return base64.urlsafe_b64encode(message.as_bytes()).decode("ascii").rstrip("=")
+
+
+def _event_datetime(value: Any, field: str) -> str:
+    if not isinstance(value, str) or len(value) > 80:
+        raise HTTPException(422, f"{field} must be an ISO-8601 date/time with a timezone.")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise HTTPException(422, f"{field} must be an ISO-8601 date/time with a timezone.") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise HTTPException(422, f"{field} must include an explicit timezone offset.")
+    return parsed.isoformat()
+
+
+def validate_google_action_payload(action_type: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Validate the exact data that will be previewed before the user approves it."""
+    if action_type in {"email_draft", "email_send"}:
+        return _email_payload(payload)
+
+    if action_type == "calendar_create":
+        summary = str(payload.get("summary", "")).strip()
+        start = _event_datetime(payload.get("start"), "start")
+        end = _event_datetime(payload.get("end"), "end")
+        if not summary or len(summary) > 250:
+            raise HTTPException(422, "Calendar event title must be 1–250 characters.")
+        if datetime.fromisoformat(start) >= datetime.fromisoformat(end):
+            raise HTTPException(422, "Calendar event end must be after its start.")
+        return {
+            "summary": summary,
+            "start": start,
+            "end": end,
+            "description": str(payload.get("description", ""))[:10000],
+            "location": str(payload.get("location", ""))[:500],
+        }
+
+    if action_type == "calendar_update":
+        event_id = str(payload.get("event_id", "")).strip()
+        if not event_id or len(event_id) > 256 or any(ch.isspace() for ch in event_id):
+            raise HTTPException(422, "A valid calendar event ID is required.")
+        allowed = {"summary", "description", "location", "start", "end"}
+        patch: dict[str, Any] = {}
+        for key in allowed:
+            if key not in payload:
+                continue
+            if key == "summary":
+                value = str(payload[key]).strip()
+                if not value or len(value) > 250:
+                    raise HTTPException(422, "Calendar event title must be 1–250 characters.")
+                patch[key] = value
+            elif key == "description":
+                patch[key] = str(payload[key])[:10000]
+            elif key == "location":
+                patch[key] = str(payload[key])[:500]
+            else:
+                patch[key] = {"dateTime": _event_datetime(payload[key], key)}
+        if not patch:
+            raise HTTPException(422, "Provide at least one field to update.")
+        if ("start" in patch) != ("end" in patch):
+            raise HTTPException(422, "When changing event time, provide both start and end.")
+        if "start" in patch and datetime.fromisoformat(patch["start"]["dateTime"]) >= datetime.fromisoformat(patch["end"]["dateTime"]):
+            raise HTTPException(422, "Calendar event end must be after its start.")
+        return {"event_id": event_id, "patch": patch}
+
+    raise HTTPException(422, "This action type has no supported Google execution handler.")
+
+
+def execute_google_action(action_type: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Execute only after the caller has durably recorded an explicit user approval."""
+    _require_write_access()
+    normalized = validate_google_action_payload(action_type, payload)
+
+    if action_type == "email_draft":
+        result = google_client("gmail", "v1").users().drafts().create(
+            userId="me", body={"message": {"raw": _email_raw(normalized)}}
+        ).execute()
+        return {"kind": "gmail_draft", "draftId": str(result.get("id", "")), "created": True}
+
+    if action_type == "email_send":
+        result = google_client("gmail", "v1").users().messages().send(
+            userId="me", body={"raw": _email_raw(normalized)}
+        ).execute()
+        return {"kind": "gmail_send", "messageId": str(result.get("id", "")), "sent": True}
+
+    if action_type == "calendar_create":
+        event = {
+            "summary": normalized["summary"],
+            "description": normalized["description"],
+            "location": normalized["location"],
+            "start": {"dateTime": normalized["start"]},
+            "end": {"dateTime": normalized["end"]},
+        }
+        result = google_client("calendar", "v3").events().insert(calendarId="primary", body=event).execute()
+        return {
+            "kind": "calendar_create",
+            "eventId": str(result.get("id", "")),
+            "htmlLink": result.get("htmlLink", ""),
+            "created": True,
+        }
+
+    if action_type == "calendar_update":
+        service = google_client("calendar", "v3")
+        current = service.events().get(calendarId="primary", eventId=normalized["event_id"]).execute()
+        if current.get("status") == "cancelled":
+            raise HTTPException(409, "This calendar event is already cancelled.")
+        result = service.events().patch(
+            calendarId="primary", eventId=normalized["event_id"], body=normalized["patch"]
+        ).execute()
+        return {
+            "kind": "calendar_update",
+            "eventId": str(result.get("id", "")),
+            "htmlLink": result.get("htmlLink", ""),
+            "updated": True,
+        }
+
+    raise HTTPException(422, "This action type is not executable.")
+
+
 @router.get("/api/google/oauth/start", dependencies=[Depends(require_api_token)])
 async def oauth_start() -> dict:
     url, flow = new_flow()
