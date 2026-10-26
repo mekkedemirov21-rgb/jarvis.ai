@@ -311,3 +311,37 @@ async def stop_optional_email_monitor() -> None:
         except asyncio.CancelledError:
             pass
         _email_monitor_task = None
+
+from backend.job_monitor import router as job_monitor_router, ENABLED as JOB_MONITOR_ENABLED, POLL_SECONDS as JOB_MONITOR_POLL_SECONDS, monitor_job_once  # noqa: E402
+app.include_router(job_monitor_router)
+
+_job_monitor_task: asyncio.Task | None = None
+
+async def _job_monitor_loop() -> None:
+    """Opt-in scheduled job scans; uses Adzuna plus the local Ollama model."""
+    while True:
+        try:
+            await asyncio.to_thread(monitor_job_once)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # Never log private profile data, provider API keys, or listing text.
+            pass
+        await asyncio.sleep(JOB_MONITOR_POLL_SECONDS)
+
+@app.on_event("startup")
+async def start_optional_job_monitor() -> None:
+    global _job_monitor_task
+    if JOB_MONITOR_ENABLED and _job_monitor_task is None:
+        _job_monitor_task = asyncio.create_task(_job_monitor_loop())
+
+@app.on_event("shutdown")
+async def stop_optional_job_monitor() -> None:
+    global _job_monitor_task
+    if _job_monitor_task is not None:
+        _job_monitor_task.cancel()
+        try:
+            await _job_monitor_task
+        except asyncio.CancelledError:
+            pass
+        _job_monitor_task = None
