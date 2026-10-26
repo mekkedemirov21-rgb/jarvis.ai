@@ -106,7 +106,7 @@ document.querySelectorAll("[data-jump]").forEach(b=>b.addEventListener("click",(
 function node(tag,cls,text){const el=document.createElement(tag);if(cls)el.className=cls;if(text!==undefined)el.textContent=text;return el}
 function clear(e){e.replaceChildren()}
 function addItem(parent,title,meta,body,tag){const wrap=node("div","item");if(tag)wrap.append(node("span","pill",tag));wrap.append(node("h3","",title));if(meta)wrap.append(node("div","meta",meta));if(body)wrap.append(node("div","snippet",body));parent.append(wrap)}
-$("connect").addEventListener("click",async()=>{try{const data=await api("/api/integrations/status");$("modelstatus").textContent=JSON.stringify(data,null,2);$("health").innerHTML='<i class="dot"></i>Lokaler Dienst verbunden';notice("mailnotice","Lokale API erreichbar. Google-Zugriff benötigt gegebenenfalls noch OAuth-Konfiguration.");await loadMemory();await loadApprovals();await loadReminders();startReminderPolling();await loadMonitorStatus();await loadMonitorAlerts();startMonitorAlertPolling()}catch(e){$("health").textContent="Verbindung fehlgeschlagen";$("modelstatus").textContent=e.message}});
+$("connect").addEventListener("click",async()=>{try{const data=await api("/api/integrations/status");$("modelstatus").textContent=JSON.stringify(data,null,2);$("health").innerHTML='<i class="dot"></i>Lokaler Dienst verbunden';notice("mailnotice","Lokale API erreichbar. Google-Zugriff benötigt gegebenenfalls noch OAuth-Konfiguration.");await loadMemory();await loadApprovals();await loadReminders();startReminderPolling();await loadMonitorStatus();await loadMonitorAlerts();startMonitorAlertPolling();await loadJobMonitor()}catch(e){$("health").textContent="Verbindung fehlgeschlagen";$("modelstatus").textContent=e.message}});
 async function checkHealth(){try{const r=await fetch("/health");const d=await r.json();$("health").textContent=d.status==="ok"?"Lokaler Dienst erreichbar · "+d.model:"Dienst nicht verfügbar"}catch{$("health").textContent="API nicht erreichbar"}}
 checkHealth();
 $("chatform").addEventListener("submit",async e=>{e.preventDefault();const text=$("chatinput").value.trim();if(!text)return;mem.chat.push({role:"user",content:text});const log=$("chatlog");if(log.querySelector(".empty"))clear(log);log.append(node("div","bubble user","Du: "+text));$("chatinput").value="";$("sendchat").disabled=true;try{const data=await api("/api/chat",{method:"POST",body:JSON.stringify({messages:mem.chat.slice(-20)})});mem.chat.push({role:"assistant",content:data.reply});log.append(node("div","bubble","JARVIS: "+data.reply));}catch(err){log.append(node("div","bubble",err.message))}finally{$("sendchat").disabled=false;log.scrollTop=log.scrollHeight}});
@@ -124,6 +124,102 @@ $("googledisconnect").addEventListener("click",async()=>{if(!confirm("Lokales Go
 $("calendarrefresh").addEventListener("click",async()=>{const box=$("calendaritems");box.textContent="Termine werden geladen …";try{const d=await api("/api/google/calendar/upcoming");clear(box);if(!d.events.length)box.append(node("div","empty","Keine anstehenden Termine."));d.events.forEach(ev=>{const start=ev.start.dateTime||ev.start.date||"Zeit nicht angegeben";addItem(box,ev.summary,start,ev.location||"",ev.status);if(ev.id){const card=box.lastElementChild;const edit=node("button","","Änderung vorschlagen");edit.style.marginTop="8px";edit.addEventListener("click",()=>{showTab("approvals");$("actiontype").value="calendar_update";refreshActionFields();$("actioneventid").value=ev.id;$("actionsummary").value=ev.summary||"";$("actionlocation").value=ev.location||"";$("actiondescription").value="";$("actionstart").value="";$("actionend").value="";notice("actionnotice","Termin ausgewählt. Ändere nur die benötigten Felder, speichere den Vorschlag, prüfe ihn und bestätige anschließend separat.");$("actionsummary").focus()});card.append(edit)}if(ev.htmlLink){const a=node("a","","In Google Kalender öffnen");a.href=ev.htmlLink;a.target="_blank";a.rel="noopener noreferrer";box.lastElementChild.append(a)}})}catch(e){box.textContent=e.message}});
 $("jobsearch").addEventListener("submit",async e=>{e.preventDefault();const box=$("joblinks");clear(box);box.append(node("div","empty","Suche nach passenden Stellen …"));try{const q=new URLSearchParams({q:$("jobq").value,location:$("jobloc").value});const d=await api("/api/jobs/search?"+q);clear(box);if(d.configured&&d.results.length){d.results.forEach(job=>{const card=node("div","item");card.append(node("h3","",job.title),node("div","meta",job.employer+" · "+job.location+" · "+(job.created||"Datum unbekannt")));if(job.salaryMin||job.salaryMax)card.append(node("div","snippet","Gehalt: "+(job.salaryMin||"?")+"–"+(job.salaryMax||"?")));card.append(node("div","snippet",job.description));const row=node("div","row");if(job.url&&job.url.startsWith("https://")){const a=node("a","","Anzeige öffnen");a.href=job.url;a.target="_blank";a.rel="noopener noreferrer";row.append(a)}const pick=node("button","","Passung lokal prüfen");pick.addEventListener("click",()=>{$("jobtitle").value=job.title;$("jobemployer").value=job.employer;$("joburl").value=job.url||"";$("jobdesc").value=job.description||"";$("jobreview").classList.remove("hidden");$("jobreview").textContent="Ergänze bzw. prüfe dein Profil und klicke auf „Passung prüfen“.";$("profile").focus()});row.append(pick);card.append(row);box.append(card)})}else{box.append(node("div","empty",d.note||"Keine Stellen gefunden."));(d.searchLinks||[]).forEach(src=>{if(!src.url||!src.url.startsWith("https://"))return;const row=node("div","item");const a=node("a","",""+src.name+" öffnen");a.href=src.url;a.target="_blank";a.rel="noopener noreferrer";row.append(a,node("div","meta","Originalquelle · keine automatisierte Datenerfassung"));box.append(row)})}}catch(err){box.textContent=err.message}});
 $("jobevaluate").addEventListener("submit",async e=>{e.preventDefault();const out=$("jobreview");out.classList.remove("hidden");out.textContent="Prüfe Stellenpassung mit lokalem Modell …";try{const d=await api("/api/jobs/evaluate",{method:"POST",body:JSON.stringify({title:$("jobtitle").value,employer:$("jobemployer").value,source_url:$("joburl").value,location:$("jobloc").value,description:$("jobdesc").value,profile_summary:$("profile").value})});out.textContent=d.review+"\n\nHinweis: nicht gespeichert · keine Bewerbung gesendet."}catch(err){out.textContent=err.message}});
+
+async function loadJobMonitorStatus(){
+  const box=$("jobmonitorstatus");
+  try{
+    const d=await api("/api/jobs/monitor/status");
+    clear(box);
+    box.append(node("div","",
+      "Monitor: "+(d.enabled?"aktiv":"deaktiviert")+
+      " · Adzuna: "+(d.configured?"konfiguriert":"nicht konfiguriert")+
+      " · aktive Suchprofile: "+d.activeWatches+" · neue Hinweise: "+d.unreadAlerts));
+    box.append(node("p","sub",d.enabled
+      ? "Der Companion prüft neue Stellen ungefähr alle "+Math.round(d.pollSeconds/3600)+" Stunden. Der erste Lauf legt eine Basisliste an; neue Treffer werden anschließend lokal bewertet."
+      : "Für automatische Suche JARVIS_ENABLE_JOB_MONITOR=true in der lokalen .env setzen und den Companion neu starten. Ohne Adzuna-Schlüssel kann kein API-basiertes Monitoring laufen."));
+  }catch(e){box.textContent=e.message}
+}
+
+async function loadJobWatches(){
+  const box=$("jobwatchitems");
+  try{
+    const d=await api("/api/jobs/watches");
+    clear(box);
+    if(!d.items.length)box.append(node("div","empty","Noch keine gespeicherten Suchprofile."));
+    d.items.forEach(item=>{
+      const wrap=node("div","item");
+      wrap.append(node("h3","",item.query),node("div","meta",item.location+" · "+({any:"Alle Arbeitsmodelle",remote:"Remote",hybrid:"Hybrid",onsite:"Vor Ort"}[item.remotePreference]||item.remotePreference)));
+      if(item.minSalary!==null&&item.minSalary!==undefined)wrap.append(node("div","snippet","Mindestgehalt: "+Number(item.minSalary).toLocaleString("de-DE")+" € pro Jahr"));
+      if(item.active){
+        const deactivate=node("button","","Suchprofil deaktivieren");
+        deactivate.style.marginTop="8px";
+        deactivate.addEventListener("click",async()=>{
+          if(!confirm("Dieses Suchprofil deaktivieren? Der Monitor findet danach keine neuen Treffer dafür."))return;
+          try{await api("/api/jobs/watches/"+encodeURIComponent(item.id),{method:"DELETE"});await loadJobWatches();await loadJobMonitorStatus()}
+          catch(e){notice("jobwatchnotice",e.message,"warn")}
+        });
+        wrap.append(deactivate);
+      }else wrap.append(node("p","sub","Deaktiviert"));
+      box.append(wrap);
+    });
+  }catch(e){box.textContent=e.message}
+}
+
+async function loadJobAlerts(){
+  const box=$("jobalertitems");
+  try{
+    const d=await api("/api/jobs/alerts");
+    clear(box);
+    if(!d.items.length)box.append(node("div","empty","Keine neuen Stellen-Hinweise. Prüfe, ob Adzuna-Schlüssel und Job-Monitor in der lokalen .env eingerichtet sind."));
+    d.items.forEach(item=>{
+      const wrap=node("div","item");
+      const rec=item.recommendation==="apply"?"JARVIS empfiehlt Bewerbung prüfen":"Manuelle Prüfung empfohlen";
+      wrap.append(node("h3","",item.title||"Stelle"),node("div","meta",(item.employer||"Arbeitgeber unbekannt")+" · "+(item.location||"Ort unbekannt")+" · Passung "+Number(item.fitScore||0)+"/100"));
+      wrap.append(node("span","pill",rec));
+      if(item.created)wrap.append(node("div","meta","Veröffentlicht: "+item.created));
+      if(Array.isArray(item.reasons)&&item.reasons.length)wrap.append(node("div","snippet","Warum passend: "+item.reasons.join(" · ")));
+      if(Array.isArray(item.missingRequirements)&&item.missingRequirements.length)wrap.append(node("div","snippet","Bitte prüfen: "+item.missingRequirements.join(" · ")));
+      if(item.salaryMin||item.salaryMax)wrap.append(node("div","snippet","Gehalt aus Anzeige: "+(item.salaryMin||"?")+"–"+(item.salaryMax||"?")+" €"));
+      const row=node("div","row");
+      if(typeof item.url==="string"&&item.url.startsWith("https://")){
+        const link=node("a","","Originalanzeige öffnen");link.href=item.url;link.target="_blank";link.rel="noopener noreferrer";row.append(link);
+      }
+      const read=node("button","","Als geprüft markieren");
+      read.addEventListener("click",async()=>{
+        try{await api("/api/jobs/alerts/"+encodeURIComponent(item.id)+"/read",{method:"POST"});await loadJobAlerts();await loadJobMonitorStatus()}
+        catch(e){notice("jobwatchnotice",e.message,"warn")}
+      });
+      row.append(read);wrap.append(row);
+      box.append(wrap);
+    });
+  }catch(e){box.textContent=e.message}
+}
+
+async function loadJobMonitor(){
+  await Promise.all([loadJobMonitorStatus(),loadJobWatches(),loadJobAlerts()]);
+}
+$("jobmonitorrefresh").addEventListener("click",loadJobMonitor);
+$("jobalertsrefresh").addEventListener("click",loadJobAlerts);
+$("jobwatchform").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const salaryText=$("watchsalary").value.trim();
+  const payload={
+    query:$("watchquery").value.trim(),
+    location:$("watchlocation").value.trim(),
+    profile_summary:$("watchprofile").value.trim(),
+    remote_preference:$("watchremote").value,
+    min_salary:salaryText===""?null:Number(salaryText)
+  };
+  try{
+    const result=await api("/api/jobs/watches",{method:"POST",body:JSON.stringify(payload)});
+    notice("jobwatchnotice","Suchprofil lokal verschlüsselt gespeichert. "+(result.monitorEnabled?"Der Hintergrund-Monitor ist aktiv.":"Der Monitor ist noch deaktiviert; aktiviere JARVIS_ENABLE_JOB_MONITOR in der lokalen .env und starte JARVIS neu."));
+    $("jobwatchform").reset();
+    $("watchlocation").value="Sinsheim, Deutschland";
+    await loadJobMonitor();
+  }catch(e){notice("jobwatchnotice",e.message,"warn")}
+});
+document.querySelector('.nav button[data-tab="jobs"]').addEventListener("click",loadJobMonitor);
+
 async function loadMemory(){const box=$("memoryitems");try{const d=await api("/api/memory");clear(box);if(!d.notes.length)box.append(node("div","empty","Noch keine Notizen."));d.notes.forEach(n=>addItem(box,n.name,new Date(n.updatedAt*1000).toLocaleString("de-DE"),n.bytes+" Bytes","Markdown"))}catch(e){box.textContent=e.message}}
 $("memoryrefresh").addEventListener("click",loadMemory);
 $("memoryform").addEventListener("submit",async e=>{e.preventDefault();try{const data=await api("/api/memory",{method:"POST",body:JSON.stringify({title:$("memtitle").value,content:$("memcontent").value,tags:$("memtags").value.split(",").map(s=>s.trim()).filter(Boolean)})});notice("memnotice","Lokal gespeichert: "+data.name,"good");$("memcontent").value="";await loadMemory()}catch(err){notice("memnotice",err.message,"warn")}});
