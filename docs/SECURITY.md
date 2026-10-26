@@ -1,52 +1,69 @@
-# JARVIS Security and Privacy Policy (development baseline)
+# JARVIS security and privacy policy (development baseline)
 
-JARVIS handles highly sensitive material. This is a practical baseline, not a certification or a claim that the system is free of vulnerabilities.
+Last updated: 26 October 2026. This is a practical development policy, not a security certification or guarantee that no vulnerabilities exist.
 
-## Data boundaries
+## Data inventory
 
-| Data | Intended location | Current treatment |
+| Data | Where it goes | Current protection |
 |---|---|---|
-| Chat prompts/replies | Local Ollama process | Not written intentionally to API logs or application database |
-| Approval payloads | Local SQLite DB | AES-256-GCM authenticated encryption with local key |
-| Memory notes | Local Markdown vault | Plain text for Obsidian interoperability; requires OS full-disk encryption |
-| Google OAuth token | `backend/data/google-token.enc` | AES-256-GCM encrypted local token; read-only Gmail/Calendar scopes |
-| Email/calendar metadata | Returned from Google on demand | Read-only; recent snippets/events are not saved by the connector |
-| WhatsApp personal chats | Not collected | No supported general consumer API integration |
-| GitHub repository | Public source code | Never put secrets, personal data, notes, exports, or database files here |
+| Chat prompts and replies | Android dashboard → local FastAPI → loopback Ollama/LM Studio | Not intentionally logged or stored by the API; local model necessarily sees plaintext for inference |
+| API token on Android | App-private preferences | AES-GCM ciphertext; encryption key stored in Android Keystore |
+| Companion API token on PC | User's local `.env` | Plaintext file; must stay outside Git and under OS account/full-disk protection |
+| Google OAuth credentials | Local `backend/data/google-token.enc` | AES-256-GCM ciphertext using local `JARVIS_DATA_KEY` |
+| Approval payloads | Local SQLite DB | AES-256-GCM ciphertext |
+| Job watch/profile records | Local SQLite DB | AES-256-GCM ciphertext |
+| Relationship reminders | Local SQLite DB | AES-256-GCM ciphertext |
+| Email and job-monitor alerts | Local SQLite DB | AES-256-GCM ciphertext; IDs used for deduplication are hashed |
+| Obsidian-compatible notes | Local `backend/data/vault/*.md` | Plaintext Markdown, so use full-disk encryption and do not save high-risk secrets here |
+| Gmail/calendar data | Google API after explicit OAuth | Current scopes are read-only; selected metadata/snippets are processed locally |
+| WhatsApp personal history | Not collected | No general official consumer integration; do not scrape local sessions/cookies |
+| GitHub | Source/config/documentation | Public repository—never store private data or live credentials |
 
-## Security controls currently present
+## Current controls
 
-- The API refuses to start without a `JARVIS_API_TOKEN` of at least 32 characters.
-- Protected endpoints require Bearer-token authentication using constant-time comparison.
-- The API checks that `OLLAMA_BASE_URL` resolves to loopback only; default is `http://127.0.0.1:11434`.
-- API is documented to bind to `127.0.0.1`; do not change to `0.0.0.0`.
-- Approval payloads are encrypted with AES-256-GCM; nonce and ciphertext are stored together and authenticated on read.
-- The local chat endpoint passes no tools to the model and does not persist prompts or responses.
-- Action decisions are logged in a local state table but do not currently execute side effects.
-- `.gitignore` excludes local .env files, databases, logs and local data.
+- Backend requires a random API token of at least 32 characters before startup.
+- Protected endpoints use Bearer-token auth and constant-time token comparison.
+- Both configured local inference endpoints (Ollama and LM Studio) must resolve to loopback; the adapter rejects non-loopback endpoints.
+- Android accepts HTTPS companion URLs only; cleartext HTTP and mixed content are disabled.
+- Android encrypts the saved API token with AES-GCM using an Android Keystore key and does not store it in page localStorage.
+- Android WebView disables file/content access and blocks third-party frames/navigation; external HTTPS links open outside the WebView.
+- Approval payloads, relationship reminders, Google OAuth tokens and saved job watch data are encrypted with AES-256-GCM.
+- Mail/job monitor alert payloads are encrypted; monitor notifications contain generic wording rather than mail subjects/snippets.
+- Model prompts have no tools/action capabilities. Emails/job listings are untrusted input; prompt-injection content is not a source of permissions.
+- External actions are not implemented. An approval record currently records a decision but does not send email, edit calendar, delete messages or submit applications.
+- Background mail/job monitoring is disabled by default.
+- Android background notification polling is periodic and best-effort; Android may delay it.
 
 ## Required deployment precautions
 
-1. Enable full-disk encryption on the computer hosting JARVIS (BitLocker, FileVault or LUKS). The Markdown vault is plaintext on that device.
-2. Generate secrets locally. Keep `.env` outside Git and never put keys, OAuth client secrets, session cookies or refresh tokens in source files, screenshots, issue reports or chat prompts.
-3. Keep Ollama and JARVIS API on loopback. Do not port-forward them or expose them through a public tunnel.
-4. Do not connect a phone to the host API over plain HTTP on a LAN. A future pairing flow must use authenticated TLS or a properly configured private VPN plus device authentication.
-5. Use Google OAuth is currently read-only (`gmail.readonly`, `calendar.events.readonly`). Configure OAuth locally with the redirect URI documented in `backend/README.md`. Gmail read scopes can trigger Google's restricted-scope verification requirements for public distribution.
-6. All consequential actions (send email, submit application, alter calendar, send a message, delete/ archive mail) must show the full proposed action and require fresh user confirmation.
-7. Treat incoming email, job descriptions, documents and chat exports as untrusted. They can contain prompt-injection instructions. Never allow content to grant itself permissions.
-8. Prefer reversible actions; never automatically permanently delete email or accept/reject an offer.
-9. Store only necessary facts, offer deletion and export, and implement retention limits before automatic memory capture.
-10. Back up encrypted data and test recovery. Keep encryption key backups separately and securely; losing the key makes encrypted approval records unrecoverable.
+1. **Do not expose the API or model server publicly.** Bind FastAPI and Ollama/LM Studio to loopback. For phone access use a private VPN plus authenticated HTTPS (for example Tailscale Serve within the tailnet). Do not use a public tunnel.
+2. **Use OS disk encryption.** The Markdown vault, local `.env`, some metadata and SQLite database must be protected by the host OS. Store backups of `JARVIS_DATA_KEY` separately and securely. Loss of the key can make encrypted records unrecoverable.
+3. **Keep secrets out of Git.** Never paste API tokens, Google OAuth client secrets, refresh tokens, cookies, exported mail, CVs, WhatsApp chats or the local database into issues, commits, screenshots or chat prompts.
+4. **Use minimum OAuth scopes.** Current Gmail and Calendar access is read-only. Google can require verification or additional review for public apps using restricted scopes. Review scopes before adding a future write capability.
+5. **Keep human confirmation.** Any later action that sends an email, changes a calendar, submits an application or sends a message must present the exact recipient/target and final payload and require fresh confirmation immediately before execution. Prefer reversible actions and an audit record. Never automatically delete an acceptance/rejection email or accept/reject an offer.
+6. **Treat third-party content as untrusted.** Emails, invites, job descriptions, documents and search results can contain prompt injection. Never let content itself grant tool permissions.
+7. **Minimize memory.** Do not automatically store every conversation or private email. Memory should be editable, exportable, deletable and have retention limits before automatic capture is added.
+8. **Protect personal notifications.** Android notifications intentionally do not include sender, subject or private text. Use lock-screen privacy settings too.
+9. **Update and test.** CI tests help catch regressions but are not a security audit. Patch operating system and dependencies. Review dependency changes and perform independent threat modeling and penetration testing before distributing widely.
 
-## Limits and honest claims
+## Encryption: what is and is not true
 
-- "No data leaks" cannot be guaranteed. Risk can be reduced with minimized permissions, local processing, encryption, isolation, patching, audits, testing, backup hygiene and explicit approval gates.
-- Local inference protects prompts from being sent to a model provider, but the external service (for example Google) still handles its own account data. If an email body is retrieved, JARVIS necessarily sees that body in plaintext locally to analyze it.
-- Local Ollama only stays local if it is configured and operated locally. If a cloud model/provider is selected later, data will cross the device boundary; that mode must be explicit and off by default.
-- AES-GCM protects encrypted approval payloads, not Markdown notes or all device storage.
-- The public code repository is not a place to store private data. A private account or repository alone is also not a substitute for local secret management.
-- Android-to-desktop pairing, OS keychain support, background monitoring, push/desktop notifications, Google writes, rate limiting, and a formal threat review are not fully implemented yet. The Adzuna key and Google OAuth client file must be locally supplied.
+- HTTPS encrypts data **in transit** between Android and the companion.
+- Android Keystore protects the key that encrypts the saved Android API token.
+- AES-256-GCM protects specific records stored by the companion, not all data on the device.
+- The local inference server and companion must see the input in plaintext to process it. Therefore the current app does **not** provide application-layer end-to-end encryption where the server cannot read the prompt.
+- Google processes email/calendar data through its service because JARVIS calls Google's API. Local inference avoids forwarding prompts to a model API, but does not prevent Google from handling the account data it already stores.
+- Messages sent to third-party AI agents through WhatsApp's supported agent experience are not considered E2E-encrypted personal chats by WhatsApp; private personal chat history is not imported by JARVIS.
+- No one can guarantee “zero data leaks” or “no security holes.” Only reduce and test risk.
 
 ## Incident response
 
-If a token is exposed: stop the local service, rotate the API token, rotate the data key only with a deliberate data migration/backup plan, remove the leaked value from the secret store, inspect Git history and access logs, and invalidate affected OAuth grants from the provider's account security page. Rewriting Git history does not undo a secret already copied by others.
+If a credential is exposed: stop the service, rotate the API token, revoke the affected OAuth grant with Google, inspect repository/history and access logs, and review affected data. Rotate `JARVIS_DATA_KEY` only with a deliberate migration/backup plan; simply changing it will make the old encrypted records unreadable. Rewriting Git history cannot undo a secret already copied by someone else.
+
+## Primary references
+
+- Google Gmail API scopes: https://developers.google.com/workspace/gmail/api/auth/scopes
+- Adzuna terms of service: https://developer.adzuna.com/docs/terms_of_service
+- Indeed terms: https://de.indeed.com/legal
+- WhatsApp third-party agents: https://faq.whatsapp.com/1050934623978152
+- Tailscale Serve: https://tailscale.com/docs/features/tailscale-serve
