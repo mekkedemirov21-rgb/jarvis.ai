@@ -15,7 +15,7 @@ Last updated: 26 October 2026. This is a practical development policy, not a sec
 | Relationship reminders | Local SQLite DB | AES-256-GCM ciphertext |
 | Email and job-monitor alerts | Local SQLite DB | AES-256-GCM ciphertext; IDs used for deduplication are hashed |
 | Obsidian-compatible notes | Local `backend/data/vault/*.md` | Plaintext Markdown, so use full-disk encryption and do not save high-risk secrets here |
-| Gmail/calendar data | Google API after explicit OAuth | Current scopes are read-only; selected metadata/snippets are processed locally |
+| Gmail/calendar data | Google API after explicit OAuth | Read-only by default; writes require explicit local opt-in and reauthorization with additional scopes |
 | WhatsApp personal history | Not collected | No general official consumer integration; do not scrape local sessions/cookies |
 | GitHub | Source/config/documentation | Public repository—never store private data or live credentials |
 
@@ -27,10 +27,12 @@ Last updated: 26 October 2026. This is a practical development policy, not a sec
 - Android accepts HTTPS companion URLs only; cleartext HTTP and mixed content are disabled.
 - Android encrypts the saved API token with AES-GCM using an Android Keystore key and does not store it in page localStorage.
 - Android WebView disables file/content access and blocks third-party frames/navigation; external HTTPS links open outside the WebView.
-- Approval payloads, relationship reminders, Google OAuth tokens and saved job watch data are encrypted with AES-256-GCM.
+- Approval payloads, relationship reminders, Google OAuth tokens and saved job-watch data are encrypted with AES-256-GCM.
+- Supported Google actions (Gmail draft/send and Calendar create/update) require a validated encrypted proposal, explicit approval, then a separate execute request within 15 minutes. An atomic claim avoids parallel duplicate attempts; any attempt with uncertain outcome is not retried automatically.
 - Mail/job monitor alert payloads are encrypted; monitor notifications contain generic wording rather than mail subjects/snippets.
 - Model prompts have no tools/action capabilities. Emails/job listings are untrusted input; prompt-injection content is not a source of permissions.
-- External actions are not implemented. An approval record currently records a decision but does not send email, edit calendar, delete messages or submit applications.
+- Google draft/send and Calendar create/update handlers are implemented but disabled by default. They require `JARVIS_ENABLE_GOOGLE_WRITES=true`, restart and a new Google OAuth grant. The dashboard requires a proposal review, a separate approval, and a final separate execute confirmation. Email-send confirmation warns that sending is irreversible.
+- Email deletion, automatic offer acceptance/rejection, private WhatsApp messaging, and job application submission are not implemented. The model cannot directly call actions.
 - Background mail/job monitoring is disabled by default.
 - Android background notification polling is periodic and best-effort; Android may delay it.
 
@@ -39,10 +41,10 @@ Last updated: 26 October 2026. This is a practical development policy, not a sec
 1. **Do not expose the API or model server publicly.** Bind FastAPI and Ollama/LM Studio to loopback. For phone access use a private VPN plus authenticated HTTPS (for example Tailscale Serve within the tailnet). Do not use a public tunnel.
 2. **Use OS disk encryption.** The Markdown vault, local `.env`, some metadata and SQLite database must be protected by the host OS. Store backups of `JARVIS_DATA_KEY` separately and securely. Loss of the key can make encrypted records unrecoverable.
 3. **Keep secrets out of Git.** Never paste API tokens, Google OAuth client secrets, refresh tokens, cookies, exported mail, CVs, WhatsApp chats or the local database into issues, commits, screenshots or chat prompts.
-4. **Use minimum OAuth scopes.** Current Gmail and Calendar access is read-only. Google can require verification or additional review for public apps using restricted scopes. Review scopes before adding a future write capability.
-5. **Keep human confirmation.** Any later action that sends an email, changes a calendar, submits an application or sends a message must present the exact recipient/target and final payload and require fresh confirmation immediately before execution. Prefer reversible actions and an audit record. Never automatically delete an acceptance/rejection email or accept/reject an offer.
+4. **Use minimum OAuth scopes.** Gmail and Calendar access is read-only by default. `JARVIS_ENABLE_GOOGLE_WRITES=true` additionally requests `gmail.compose` (drafts and sending) and `calendar.events` (create/edit). These Google scopes may require verification and security review for publicly distributed applications. Use only for your own testing until the consent screen is properly configured.
+5. **Keep human confirmation.** Supported Google actions must present the exact recipient/target and final payload, then require approval and a separate execute confirmation. Approval expires after 15 minutes. A failed or uncertain attempt is not retried automatically; inspect Google before proposing it again. Job applications, offer acceptance/rejection and messages are not automated. Never delete an acceptance/rejection email automatically.
 6. **Treat third-party content as untrusted.** Emails, invites, job descriptions, documents and search results can contain prompt injection. Never let content itself grant tool permissions.
-7. **Minimize memory.** Do not automatically store every conversation or private email. Memory should be editable, exportable, deletable and have retention limits before automatic capture is added.
+7. **Minimize memory.** The chat retrieves at most three lexically relevant excerpts from local Markdown notes per request; it does not send the entire vault. It does not automatically save chat conversations or email bodies. Notes must remain editable and deletable; Markdown is plaintext and needs host full-disk encryption.
 8. **Protect personal notifications.** Android notifications intentionally do not include sender, subject or private text. Use lock-screen privacy settings too.
 9. **Update and test.** CI tests help catch regressions but are not a security audit. Patch operating system and dependencies. Review dependency changes and perform independent threat modeling and penetration testing before distributing widely.
 
