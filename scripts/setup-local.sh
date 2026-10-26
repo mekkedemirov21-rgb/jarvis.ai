@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "\${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-PYTHON="\${PYTHON:-python3}"
+PYTHON="python3"
 if ! command -v "$PYTHON" >/dev/null 2>&1; then
   echo "Python 3.11+ is required. Install Python and rerun this script." >&2
   exit 1
@@ -45,6 +45,6 @@ fi
 echo
 echo "Setup finished."
 echo "1. Install/start Ollama, then run: ollama pull qwen3.5:4b"
-echo "2. Start JARVIS with: ./scripts/start-local.sh"
+echo "2. Start JARVIS with: bash scripts/start-local.sh"
 echo "3. Open http://127.0.0.1:8765/ in this computer's browser."
 echo "4. Keep .env private. Never commit it or expose port 8765 publicly."
