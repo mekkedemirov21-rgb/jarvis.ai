@@ -1,17 +1,29 @@
 # JARVIS — Personal AI UI
 
-A responsive, static frontend concept inspired by the supplied JARVIS reference image.
+A responsive, static JARVIS interface inspired by the supplied reference image, packaged as a minimal Android WebView app.
 
-## Preview locally
+## Android APK
 
-Open `index.html` in a modern browser. No build step or package installation is required.
+A GitHub Actions workflow builds a debug APK on every push to `main` and when manually started.
+
+1. Open the repository's **Actions** tab.
+2. Select **Build JARVIS APK** and open the latest run.
+3. When the run succeeds, download the **JARVIS-debug-APK** artifact.
+4. Extract the ZIP and install `app-debug.apk` on an Android device. You may need to allow installs from your browser or file manager.
+
+Workflow file: `.github/workflows/build-apk.yml`.
+
+## Run the web UI locally
+
+Open `index.html` in a modern browser. No web build step is required.
 
 ## Scope
 
-- Visual UI only: dashboard, decorative voice orb, day schedule, knowledge categories, projects, and settings.
-- No backend, API calls, authentication, persistence, or AI integration.
+- Static visual UI only: dashboard, decorative voice orb, schedule, knowledge categories, project progress, and settings.
+- No backend, AI integration, authentication, persistence, or functional app behavior.
 - Responsive desktop and mobile layout.
+- Android app icon is a vector recreation inspired by the JARVIS icon in the supplied image.
 
-## GitHub Pages
+## Android build
 
-To publish the static page, open the repository Settings → Pages and select the `main` branch and `/ (root)` as the source.
+The Android wrapper uses Kotlin, Android WebView, Android Gradle Plugin 8.7.3, Gradle 8.9, and Java 17.
