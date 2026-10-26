@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "\${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 if [ ! -f .env ]; then
-  echo "Missing .env. Run ./scripts/setup-local.sh first." >&2
+  echo "Missing .env. Run bash scripts/setup-local.sh first." >&2
   exit 1
 fi
 if [ ! -x .venv/bin/python ]; then
-  echo "Missing virtual environment. Run ./scripts/setup-local.sh first." >&2
+  echo "Missing virtual environment. Run bash scripts/setup-local.sh first." >&2
   exit 1
 fi
 
