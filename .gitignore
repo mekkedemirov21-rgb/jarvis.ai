@@ -1,0 +1,25 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+client_secret*.json
+credentials*.json
+token.json
+
+# Personal data, memory vaults and databases
+backend/data/
+vault/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+dist/
+build/
+.DS_Store
+Thumbs.db
