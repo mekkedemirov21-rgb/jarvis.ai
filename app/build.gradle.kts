@@ -11,8 +11,8 @@ android {
         applicationId = "com.jarvis.ai"
         minSdk = 23
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.3"
+        versionCode = 5
+        versionName = "1.4"
     }
 
     // Keep Java and Kotlin bytecode targets aligned for Android builds.
