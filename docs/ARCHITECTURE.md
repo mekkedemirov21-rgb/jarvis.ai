@@ -1,119 +1,105 @@
-# JARVIS Architecture — Initial Design
+# JARVIS Architecture and implementation status
 
-**Status: foundation in progress, not a finished personal-agent product.** This document separates implemented features from planned connectors so no feature is mistaken for working code.
+**Stand: 26. Oktober 2026.** The project is a local-first foundation with a working Android client and local companion. It is not yet a fully autonomous agent, and security has not been externally audited.
 
-## 1. Target architecture
+## System architecture
 
 ```text
-Android JARVIS UI
-  └── authenticated device pairing (PLANNED, not implemented)
-        └── local companion service on user's PC/home server
-              ├── policy / approval gate
-              ├── Ollama local inference (loopback only)
-              ├── local Obsidian-compatible memory vault
-              ├── encrypted pending-action database
-              ├── Gmail connector (OAuth, PLANNED)
-              ├── Google Calendar connector (OAuth, PLANNED)
-              ├── job-search link layer / permitted providers
-              ├── notification service (PLANNED)
-              └── relationship notes and user-controlled reminders
+Android app
+  ├─ remembers only private HTTPS companion URL
+  ├─ API token encrypted with Android Keystore (AES-GCM)
+  ├─ renders companion dashboard; token stays in the page's current session
+  └─ periodic WorkManager task polls private companion alerts over HTTPS
+       |
+       | HTTPS over a private VPN / tailnet (recommended)
+       v
+User-owned PC / home server
+  ├─ FastAPI service bound to 127.0.0.1:8765
+  ├─ Bearer-token authentication; random secret required at start
+  ├─ local model adapter
+  │    ├─ Ollama /api/chat
+  │    └─ LM Studio OpenAI-compatible /v1/chat/completions
+  │       (the chosen model server must resolve to loopback)
+  ├─ local SQLite DB
+  │    ├─ encrypted proposal payloads / relationship reminders / job-watch profiles
+  │    ├─ hashed IDs for monitored messages/listings
+  │    └─ encrypted monitor-alert payloads
+  ├─ local Markdown vault (Obsidian-compatible; plaintext on disk)
+  ├─ optional Google OAuth (Gmail / Calendar, read-only)
+  ├─ optional scheduled email triage and job matching
+  └─ external job provider API and ordinary job-search links
 ```
 
-The public Git repository contains source code only. It must never contain OAuth files, tokens, mailbox content, WhatsApp exports, CVs, notes, or the local database.
+The public repository must contain source only. Never commit `.env`, OAuth client secrets, token files, local databases, CVs, email contents, Markdown vault notes, WhatsApp exports or API keys.
 
-## 2. Model selection
+## Feature status
 
-### Recommended start: Ollama + Qwen 3.5 4B
+| Feature | Current state | Safety boundary |
+|---|---|---|
+| Android companion client | Implemented; requires reachable HTTPS endpoint | No insecure HTTP, no embedded API secret; API token is Android-Keystore encrypted |
+| Local AI chat | Implemented for Ollama and LM Studio | No model tools; prompt/reply not intentionally persisted by the API |
+| Memory | Local Markdown create/list, Obsidian-compatible | Markdown note content is plaintext; enable full-disk encryption |
+| Gmail read | Optional Google OAuth | Read-only `gmail.readonly` scope |
+| Calendar read | Optional Google OAuth | Read-only `calendar.events.readonly` scope |
+| Email classification | Manual triage and opt-in monitor | Model proposes categories; no send/delete/archive/accept/reject |
+| Job search | Optional Adzuna API + human-operated links | No Indeed scraping; listing text is untrusted |
+| Job-fit evaluation | User profile and listing evaluated with local LLM | No application submitted; matching can be wrong |
+| Scheduled job monitor | Optional, configured watches and encrypted alerts | No automatic applications |
+| Relationship reminders | Create/list/cancel reminders; encrypted content | User provides notes; no private WhatsApp read access |
+| Android alert notifications | Periodic WorkManager poll (minimum 15 minutes; Android may delay) | Generic message text, not mailbox subject/content; requires network and permission |
+| Approval queue | Stores proposal and user decision | Approval does **not** execute an external action yet |
+| Send/edit/delete email or calendar events | Not implemented | No write token scope requested |
+| Automatic application submission | Not implemented | Human review required |
+| Read personal WhatsApp chat history | Not implemented / no general official consumer API | No QR/session scraping or covert import |
+| True application-layer end-to-end encryption from Android to model | Not implemented | HTTPS protects transport; local model/companion must see plaintext to process |
 
-The current Ollama library lists Qwen 3.5 variants from 0.8B through 122B parameters. The 4B download is about 3.3–4.0 GB; the 9B variant is about 6.6–7.6 GB. Use `qwen3.5:4b` as a practical local starting point, then test the 9B variant if the computer has more memory. The model's listed feature set includes tool use, vision, and reasoning; JARVIS must still apply its own allow-list, confirmation gate, and output validation.
+## Model selection
 
-Commands:
-```sh
+Default: `JARVIS_LLM_PROVIDER=ollama`, `JARVIS_LLM_MODEL=qwen3.5:4b`. As listed by Ollama, the Qwen3.5 4B model download is approximately 3.3–4.0 GB; the 9B variant is approximately 6.6–7.6 GB. Qwen3.5 is the recommended first test for local assistant tasks. Quality depends on RAM/VRAM, quantization, prompt design and language/task. Do not assume a 4B model is always accurate.
+
+Setup:
+
+```bash
 ollama pull qwen3.5:4b
-ollama run qwen3.5:4b
 ```
 
-Alternative: `gpt-oss:20b` in Ollama is an open-weight reasoning/agentic model, with a listed download footprint around 14 GB. It may be more capable for complex tasks but needs substantially more RAM/VRAM and will be slower on modest hardware. LM Studio is also a viable local inference host and provides an OpenAI-compatible local API; the app can later expose a provider setting for Ollama vs LM Studio.
+LM Studio can be used instead:
 
-All local models can still hallucinate or follow malicious document instructions. No model is allowed to directly execute tools. The policy service, not the model, determines which actions exist and whether explicit approval is needed.
+- Set `JARVIS_LLM_PROVIDER=lmstudio`.
+- Start LM Studio's local API server at `http://127.0.0.1:1234/v1`.
+- Set `JARVIS_LLM_MODEL` to the exact model identifier exposed by LM Studio.
+- Keep the server bound to loopback and never place an externally hosted endpoint in this local-only adapter.
 
-## 3. Integrations
+The central adapter normalizes chat and JSON-mode responses for chat, job review, email classification and scheduled job-matching. Tests exercise both provider request shapes without contacting either server.
 
-### Gmail / email
+See [AI Models and Integrations](AI_MODELS_AND_INTEGRATIONS.md) for model comparison, hardware guidance, provider setup and linked primary sources.
 
-- Implemented in the local companion: official Google OAuth requesting only `gmail.readonly` and `calendar.events.readonly` scopes.
-- The connector reads recent inbox metadata/snippets and can send those snippets to local Ollama for manual classification of probable offers, rejections, interviews and updates.
-- Encrypted local OAuth token storage uses AES-256-GCM. Credentials JSON must be placed in the ignored `.secrets/` directory.
-- No message bodies are permanently saved by the connector; no email-send, archive or delete method exists.
-- Draft creation and send approval remain future work.
-- Require an approval screen before sending or deleting anything.
-- Do not request permanent-delete access. Prefer labels/Trash and reversible actions.
-- Access/refresh tokens must be stored in an OS secure store, not the repository or browser localStorage.
-- Google can require application verification for sensitive/restricted scopes. Personal testing and a production release have different setup requirements.
+## Data flow and trust boundaries
 
-### Google Calendar
+1. The user enters an API token locally. The backend requires Bearer authentication on protected routes.
+2. A prompt moves from the dashboard to the local FastAPI service and then to a loopback-only model endpoint. The model has no tools or ability to execute user-account actions.
+3. When Gmail is connected, metadata/snippets are fetched from Google's API after explicit OAuth consent; Google still processes the account data. The local model sees the selected snippets in plaintext while classifying them.
+4. When Adzuna keys are configured, job listing data arrives from that provider and is treated as untrusted third-party content. User profile/watch state and generated alerts are encrypted at rest in the local database.
+5. Pending action payloads and relationship reminders are encrypted with AES-256-GCM. Obsidian-compatible Markdown notes are intentionally not encrypted by the application; full-disk encryption is required for at-rest protection.
+6. Android sends requests through HTTPS. The token stored by Android is encrypted with AES-GCM using Android Keystore. The server still sees request content, because it is the trusted local processing endpoint.
 
-- Implemented read-only upcoming-event retrieval through official Google OAuth (`calendar.events.readonly`).
-- No event-write scope or create/edit/cancel method is implemented.
-- Show the proposed title, attendees, timezone, start/end, location, and notifications before an event is written.
-- Never silently invite external attendees or cancel meetings.
+## Recommended private Android connection
 
-### Jobs and applications
+1. Start JARVIS on the PC using `python -m uvicorn backend.main:app --host 127.0.0.1 --port 8765`.
+2. Install Tailscale on both PC and phone and authenticate both into the private tailnet.
+3. On the PC run `tailscale serve 8765`. Use the HTTPS URL shown by Tailscale Serve. Do not use public Funnel; keep the API port private.
+4. In the Android app enter the HTTPS URL and the API token. Grant Android notification permission if prompted.
 
-- Optional Adzuna API search is implemented when the user configures their free personal-search developer key in local `.env`; keys remain server-side. Normal search links remain available without keys.
-- Indeed must not be scraped and an agent must not automate Indeed Apply without express permission / official tools. The current implementation returns ordinary search links for Indeed, Bundesagentur für Arbeit, and LinkedIn so the user opens and reviews listings.
-- Never present an unofficial community wrapper as an official, authorized API.
-- The provider layer should support sources only when their documented APIs or user-approved feeds permit this use.
-- JARVIS can rank an imported job description against a user-approved CV profile, explain why it is a match, draft a tailored CV/cover letter, track deadlines, and prepare an application package.
-- It must not submit an application until the user sees the exact destination, job, form answers, uploaded files and generated text and explicitly confirms. Avoid mass applications.
-- Email-based job outcomes can become inbox labels/reminders after Gmail integration; don't auto-delete acceptance or rejection messages.
+If you authorize Google from the phone through this HTTPS endpoint, set `GOOGLE_REDIRECT_URI` to that exact HTTPS URL plus `/oauth/google/callback` and add the identical redirect URI to the Google OAuth Web client. For local desktop-only OAuth the default loopback callback can be used.
 
-### WhatsApp / relationship
+## Development roadmap
 
-- The official WhatsApp Business Platform is for business messaging and is not a general consumer API for silently reading a person's private chat history.
-- Do not reverse-engineer WhatsApp Web, steal session cookies, request a QR login into JARVIS, or collect a partner's messages covertly.
-- Safe initial relationship support: user-written notes, important dates, reminders, communication goals and message drafts that the user reviews and sends manually.
-- A supported business account integration, where policy permits, is a separate feature and is not a path into private personal chats.
+1. **Foundation and tests (current):** local model abstraction, secure local companion, read-only Google connector, local memory, job matching, relationship reminders, approval queue and Android notifications.
+2. **Reliability before autonomy:** test matrix for German emails and jobs; audit log for proposed actions; retention settings; export/delete workflow; OAuth-expiry handling; backup and recovery tests.
+3. **Controlled writes:** only after explicit action design, least-privilege OAuth scopes, preview of exact payload, replay/idempotency guards, approval expiry and rollback support. Never use one broad permission for convenience.
+4. **Security review:** rate-limit the local API, bind tokens to devices, review WebView/session handling, inspect dependencies/SBOM, threat model and independent penetration test.
+5. **Future real-time notifications:** choose a transport after threat-modeling. A cloud push provider may receive notification metadata and therefore requires separate privacy review. Current notifications use periodic polling and are not real-time.
 
-### Memory / Obsidian
+## Security claims
 
-- Use a local Markdown vault so notes stay portable and can be opened in Obsidian.
-- Store curated stable facts/preferences separately from transient conversation context.
-- Store the minimum necessary; define note TTL/deletion controls and a "forget this" workflow before saving personal records automatically.
-- Plain Markdown is not encrypted by itself. Protect the vault with full-disk encryption and do not sync it to a third-party cloud unless explicitly chosen by the user.
-- Pending action payloads in the current API are encrypted using AES-256-GCM, with a local key supplied outside Git. The key should eventually move into an OS keychain/keystore.
-
-## 4. Current API endpoints
-
-Run the local API as documented in `backend/README.md`. Endpoints require `Authorization: Bearer <JARVIS_API_TOKEN>` except the minimal health check.
-
-- `GET /health`: local service status only.
-- `GET /api/integrations/status`: honest connector status.
-- `POST /api/chat`: non-persistent local Ollama chat without tools.
-- `GET/POST /api/memory`: list note metadata and write local Markdown notes.
-- `GET/POST /api/approvals`: encrypted action proposals and review queue.
-- `POST /api/approvals/{id}/decision`: record approval/rejection only; it does not execute an external action.
-- `GET /api/jobs/search-links?q=...&location=...`: create human-operated search links.
-- `GET /api/jobs/search?q=...&location=...`: query Adzuna if local credentials are configured; otherwise return the human-operated links.
-- `POST /api/jobs/evaluate`: assess a user-supplied listing/profile locally without saving the inputs.
-- `GET /api/google/oauth/start`: begin OAuth; callback stores the token encrypted locally.
-- `GET /api/google/gmail/recent` / `POST /api/google/gmail/triage`: read inbox snippets and classify them locally for human review.
-- `GET /api/google/calendar/upcoming`: read upcoming events only.
-- `DELETE /api/google/disconnect-local`: remove the locally stored token; provider-side grant must be revoked separately.
-- `GET /`: local companion dashboard.
-
-The API currently is not connected to the Android UI. A secure phone-to-companion pairing and TLS-protected transport is required before networking the APK to a PC service.
-
-## 5. Phased roadmap
-
-1. Foundations and local dashboard (implemented in part): local model chat, Markdown memory, encrypted approval records, token authentication, Adzuna API search when configured, job fit evaluation, and Google read-only OAuth connector.
-2. Verification and hardening: tests, security review, rate limiting, audit events, retention controls, secret-store support and recovery procedures.
-3. Device pairing: Android Keystore-backed key, authenticated pairing, TLS, revocation and no localStorage secrets.
-4. Mail/calendar: scheduled sync, local notifications and draft workflows; all write operations require fresh approval.
-5. Job workflow: persistent preferences, local matching, application kit and human-confirmed submission only through allowed channels.
-6. Relationship module: private memory and reminders with a clear no-covert-surveillance boundary.
-7. Release: dependency scanning, threat modeling, privacy policy, consent screens and external testing.
-
-## 6. Non-goals
-
-No security promise of "zero vulnerabilities", no silent account takeover, no unapproved external sends/submissions, no destructive actions from a model-generated instruction, and no private WhatsApp account scraping.
+No implementation can responsibly guarantee zero leaks or zero vulnerabilities. The aim is to reduce risk by keeping inference local, exposing only a private HTTPS companion, minimizing OAuth scopes, encrypting selected records, avoiding automatic consequential actions and testing changes in CI. A full external security audit has not been completed.
