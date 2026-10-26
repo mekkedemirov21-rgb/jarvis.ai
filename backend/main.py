@@ -112,7 +112,7 @@ async def integration_status() -> dict:
         "approvals": {"status": "local-queue", "payloadEncryption": "AES-256-GCM"},
         "gmail": {"status": "read-only-connected" if (DATA_DIR / "google-token.enc").is_file() else "not-configured", "note": "Read-only OAuth connector; consent required"},
         "googleCalendar": {"status": "read-only-connected" if (DATA_DIR / "google-token.enc").is_file() else "not-configured", "note": "Read-only OAuth connector; consent required"},
-        "jobSearch": {"status": "external-search-links-only", "note": "No job-board scraping or automatic applications"},
+        "jobSearch": {"status": "adzuna-api-configured" if (os.getenv("ADZUNA_APP_ID", "").strip() and os.getenv("ADZUNA_APP_KEY", "").strip()) else "search-links-only", "note": "Uses Adzuna only when local API keys are configured; no job-board scraping or automatic applications"},
         "whatsappPersonal": {"status": "not-supported-by-official-personal-api", "note": "No access to private personal chat history"},
         "whatsappBusiness": {"status": "not-configured", "note": "Business API is a separate, policy-bound integration"},
     }
