@@ -49,3 +49,32 @@ def test_content_parser_handles_both_provider_shapes(monkeypatch) -> None:
     assert llm._extract_content({"message": {"content": "Ollama response"}}) == "Ollama response"
     monkeypatch.setattr(llm, "LLM_PROVIDER", "lmstudio")
     assert llm._extract_content({"choices": [{"message": {"content": "LM Studio response"}}]}) == "LM Studio response"
+
+
+
+def test_local_http_client_ignores_proxy_environment(monkeypatch) -> None:
+    kwargs = llm._build_client_kwargs(15.0)
+    assert kwargs["trust_env"] is False
+    assert kwargs["follow_redirects"] is False
+    assert kwargs["timeout"].connect == 3.0
+    assert kwargs["timeout"].read == 15.0
+
+
+def test_timeout_must_be_positive() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="positive"):
+        llm._request_timeout(0)
+    with pytest.raises(ValueError, match="positive"):
+        llm._request_timeout(-1)
+
+
+def test_local_provider_status_exposes_local_endpoint_only(monkeypatch) -> None:
+    monkeypatch.setattr(llm, "LLM_PROVIDER", "ollama")
+    monkeypatch.setattr(llm, "LLM_MODEL", "qwen3.5:4b")
+    monkeypatch.setattr(llm, "OLLAMA_URL", "http://127.0.0.1:11434")
+    status = llm.provider_status()
+    assert status["endpoint"] == "http://127.0.0.1:11434"
+    assert status["mode"] == "local-only"
+    assert status["promptsStoredByApi"] is False
+    assert status["toolsEnabled"] is False
