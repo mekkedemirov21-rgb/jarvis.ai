@@ -18,10 +18,11 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from backend.security import decrypt_text, encrypt_text, require_api_token
-from backend.llm import (LLM_MODEL, LLM_PROVIDER, LocalModelError, LocalModelTimeout, LocalModelUnavailable, chat_async, provider_status)
 
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / ".env")
+
+from backend.llm import (LLM_MODEL, LLM_PROVIDER, LocalModelError, LocalModelTimeout, LocalModelUnavailable, chat_async, provider_status)
 
 APP_NAME = "JARVIS Local Companion"
 MODEL = LLM_MODEL
@@ -36,8 +37,9 @@ app = FastAPI(
     title=APP_NAME,
     version="0.1.0",
     description=(
-        "Local-only foundation. Chat is sent to a loopback Ollama or LM Studio server; prompts are not persisted by this API. "
-        "This API does not send email, edit calendars, submit applications, or access private WhatsApp chats."
+        "Local-first assistant. Prompts are sent only to a loopback Ollama or LM Studio server. "
+        "Google email/calendar writes are disabled by default and require explicit OAuth opt-in, a proposal, approval and a separate execute request. "
+        "Job applications remain manual; private WhatsApp chat history is not accessed."
     ),
     docs_url="/docs",
     redoc_url=None,
