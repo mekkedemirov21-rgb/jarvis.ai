@@ -56,6 +56,7 @@ class MainActivity : Activity() {
     private var awaitingVoiceCommand = false
     private var pendingWakePermission = false
     private var cloudRequestPending = false
+    private var wakeStartPending = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -406,9 +407,25 @@ class MainActivity : Activity() {
             showSetup()
         }, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(2) })
         setContentView(root)
-        if (cloudPrefs.getBoolean("wakeword_enabled", false)) {
-            mainHandler.post { if (!isFinishing) startWakeWordListening() }
+        autoStartWakeWordIfEnabled()
+    }
+
+    private fun autoStartWakeWordIfEnabled() {
+        if (!cloudPrefs.getBoolean("wakeword_enabled", false) ||
+            cloudTranscript == null || wakeWordActive || wakeStartPending
+        ) return
+        wakeStartPending = true
+        mainHandler.post {
+            wakeStartPending = false
+            if (!isFinishing && cloudTranscript != null && !wakeWordActive &&
+                cloudPrefs.getBoolean("wakeword_enabled", false)
+            ) startWakeWordListening()
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        autoStartWakeWordIfEnabled()
     }
 
     private fun appendCloudTranscript(line: String) {
