@@ -9,8 +9,8 @@ JARVIS handles highly sensitive material. This is a practical baseline, not a ce
 | Chat prompts/replies | Local Ollama process | Not written intentionally to API logs or application database |
 | Approval payloads | Local SQLite DB | AES-256-GCM authenticated encryption with local key |
 | Memory notes | Local Markdown vault | Plain text for Obsidian interoperability; requires OS full-disk encryption |
-| OAuth tokens | OS credential store (planned) | OAuth connectors are not implemented |
-| Email/calendar contents | Not connected yet | No live mailbox/calendar access |
+| Google OAuth token | `backend/data/google-token.enc` | AES-256-GCM encrypted local token; read-only Gmail/Calendar scopes |
+| Email/calendar metadata | Returned from Google on demand | Read-only; recent snippets/events are not saved by the connector |
 | WhatsApp personal chats | Not collected | No supported general consumer API integration |
 | GitHub repository | Public source code | Never put secrets, personal data, notes, exports, or database files here |
 
@@ -31,7 +31,7 @@ JARVIS handles highly sensitive material. This is a practical baseline, not a ce
 2. Generate secrets locally. Keep `.env` outside Git and never put keys, OAuth client secrets, session cookies or refresh tokens in source files, screenshots, issue reports or chat prompts.
 3. Keep Ollama and JARVIS API on loopback. Do not port-forward them or expose them through a public tunnel.
 4. Do not connect a phone to the host API over plain HTTP on a LAN. A future pairing flow must use authenticated TLS or a properly configured private VPN plus device authentication.
-5. Use Google OAuth scopes incrementally. Start read-only; add write access only after explaining it to the user.
+5. Use Google OAuth is currently read-only (`gmail.readonly`, `calendar.events.readonly`). Configure OAuth locally with the redirect URI documented in `backend/README.md`. Gmail read scopes can trigger Google's restricted-scope verification requirements for public distribution.
 6. All consequential actions (send email, submit application, alter calendar, send a message, delete/ archive mail) must show the full proposed action and require fresh user confirmation.
 7. Treat incoming email, job descriptions, documents and chat exports as untrusted. They can contain prompt-injection instructions. Never allow content to grant itself permissions.
 8. Prefer reversible actions; never automatically permanently delete email or accept/reject an offer.
@@ -45,7 +45,7 @@ JARVIS handles highly sensitive material. This is a practical baseline, not a ce
 - Local Ollama only stays local if it is configured and operated locally. If a cloud model/provider is selected later, data will cross the device boundary; that mode must be explicit and off by default.
 - AES-GCM protects encrypted approval payloads, not Markdown notes or all device storage.
 - The public code repository is not a place to store private data. A private account or repository alone is also not a substitute for local secret management.
-- Android-to-desktop pairing, OS keychain support, OAuth tokens, connectors, rate limiting, notification delivery, and a formal threat review are not fully implemented yet.
+- Android-to-desktop pairing, OS keychain support, background monitoring, push/desktop notifications, Google writes, rate limiting, and a formal threat review are not fully implemented yet. The Adzuna key and Google OAuth client file must be locally supplied.
 
 ## Incident response
 
