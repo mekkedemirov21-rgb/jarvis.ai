@@ -334,7 +334,7 @@ class MainActivity : Activity() {
         root.addView(header)
 
         val modelName = cloudPrefs.getString("model_name", "gpt-oss:20b").orEmpty()
-        modelInput = EditText(this).apply {
+        val modelField = EditText(this).apply {
             hint = "Ollama-Modell"
             setText(modelName)
             setSingleLine(true)
@@ -344,29 +344,32 @@ class MainActivity : Activity() {
             setPadding(dp(10), dp(7), dp(10), dp(7))
             background = inputBackground()
         }
-        root.addView(modelInput, LinearLayout.LayoutParams(-1, dp(42)).apply { bottomMargin = dp(4) })
+        modelInput = modelField
+        root.addView(modelField, LinearLayout.LayoutParams(-1, dp(42)).apply { bottomMargin = dp(4) })
         root.addView(label(
             "Ollama Cloud: Antworten kommen aus der Cloud, nicht lokal. Free-Kontingent ist begrenzt. Bitte keine Passwörter, privaten E-Mails oder sensiblen Dokumente senden.",
             10f, Color.rgb(178, 151, 111)
         ).apply { setPadding(0, 0, 0, dp(6)) })
 
-        cloudScroll = ScrollView(this).apply {
+        val transcriptScroll = ScrollView(this).apply {
             setBackgroundColor(Color.rgb(7, 13, 20))
             isFillViewport = false
         }
-        cloudTranscript = label(
+        val transcriptView = label(
             "JARVIS: Ich bin bereit. Schreib mir eine Nachricht oder aktiviere das Wakeword, solange diese App geöffnet ist.",
             14f, Color.rgb(225, 238, 249)
         ).apply { setPadding(dp(12), dp(12), dp(12), dp(12)) }
-        cloudScroll?.addView(cloudTranscript)
-        root.addView(cloudScroll, LinearLayout.LayoutParams(-1, 0, 1f).apply {
+        cloudScroll = transcriptScroll
+        cloudTranscript = transcriptView
+        transcriptScroll.addView(transcriptView)
+        root.addView(transcriptScroll, LinearLayout.LayoutParams(-1, 0, 1f).apply {
             topMargin = dp(4); bottomMargin = dp(8)
         })
 
         val inputRow = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
-        cloudInput = EditText(this).apply {
+        val promptInput = EditText(this).apply {
             hint = "Schreib JARVIS eine Nachricht …"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             minLines = 2
@@ -376,7 +379,8 @@ class MainActivity : Activity() {
             setPadding(dp(12), dp(10), dp(12), dp(10))
             background = inputBackground()
         }
-        inputRow.addView(cloudInput, LinearLayout.LayoutParams(-1, -2))
+        cloudInput = promptInput
+        inputRow.addView(promptInput, LinearLayout.LayoutParams(-1, -2))
         inputRow.addView(button("Senden") {
             val prompt = cloudInput?.text?.toString()?.trim().orEmpty()
             if (prompt.isNotBlank()) {
@@ -397,11 +401,12 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(4) })
         root.addView(voiceRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
 
-        cloudStatus = label(
+        val statusView = label(
             "Wakeword aus. Zum Sprachtest die Erkennung aktivieren.",
             10f, Color.rgb(135, 158, 178)
         ).apply { setPadding(dp(2), dp(4), dp(2), dp(3)) }
-        root.addView(cloudStatus)
+        cloudStatus = statusView
+        root.addView(statusView)
         root.addView(button("Zum bisherigen Server-Verbindungsbildschirm") {
             stopWakeWordListening()
             showSetup()
