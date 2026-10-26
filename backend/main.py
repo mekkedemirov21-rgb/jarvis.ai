@@ -66,8 +66,9 @@ def init_db() -> None:
 @app.on_event("startup")
 def startup() -> None:
     # Validate the required secret/key at startup, not on the first sensitive request.
-    if len(os.getenv("JARVIS_API_TOKEN", "")) < 32:
-        raise RuntimeError("Set JARVIS_API_TOKEN to a locally generated secret of at least 32 characters.")
+    api_token = os.getenv("JARVIS_API_TOKEN", "").strip()
+    if len(api_token) < 32 or api_token.lower().startswith(("replace_with", "change_me", "your_")):
+        raise RuntimeError("Set JARVIS_API_TOKEN to a locally generated random secret of at least 32 characters; do not use the example placeholder.")
     from backend.security import _aead
     _aead()
     init_db()
