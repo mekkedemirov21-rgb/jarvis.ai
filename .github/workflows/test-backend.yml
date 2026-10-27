@@ -2,7 +2,7 @@ name: Test JARVIS backend
 
 on:
   push:
-    branches: [main]
+    branches: [main, jarvis-galaxy-localhost]
     paths:
       - 'backend/**'
       - 'tests/**'
