@@ -91,7 +91,7 @@ class MainActivity : Activity() {
         })
         page.addView(label("Mit deinem privaten Companion verbinden", 17f, Color.rgb(225, 238, 249), true))
         page.addView(label(
-            "Der Companion stellt KI, Gedächtnis und Integrationen bereit. Für JARVIS direkt auf diesem Handy nutze http://127.0.0.1:8765. Andere Geräte dürfen nur über eine private HTTPS-Verbindung verbinden.",
+            "Der Companion stellt KI, Gedächtnis und Integrationen bereit. Bei Groq werden Chat-Nachrichten in der Cloud verarbeitet; mit Ollama/LM Studio lokal. Für JARVIS direkt auf diesem Handy nutze http://127.0.0.1:8765. Andere Geräte dürfen nur über eine private HTTPS-Verbindung verbinden.",
             12f, Color.rgb(148, 169, 188)
         ).apply { setPadding(0, dp(8), 0, dp(14)) })
 
