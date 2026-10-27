@@ -63,7 +63,6 @@ class MainActivity : Activity() {
         window.navigationBarColor = Color.rgb(5, 8, 12)
         baseUrl = prefs.getString(KEY_BASE_URL, "").orEmpty()
         if (!GroqKeyVault.read(this).isNullOrBlank()) showGroqChat() else showGroqSetup()
-        requestNotificationPermissionIfNeeded()
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
@@ -167,7 +166,7 @@ class MainActivity : Activity() {
                     cloudMessages.clear(); showGroqSetup()
                 }.show()
         }, LinearLayout.LayoutParams(-1, dp(46)))
-        root.addView(label("Die kostenlose Groq-Nutzung ist begrenzt und kann sich ändern. JARVIS aktiviert keine kostenpflichtige Nutzung selbst.",
+        root.addView(label("Groq-Quotas und Preise können sich ändern. Prüfe vor Nutzung, ob dein Groq-Konto Abrechnung aktiviert hat; API-Aufrufe können dann kostenpflichtig sein. JARVIS setzt kein Ausgabenlimit durch und bezahlt nichts selbst.",
             10f, Color.rgb(178, 151, 111)).apply { setPadding(0, dp(16), 0, 0) })
         setContentView(ScrollView(this).apply { isFillViewport = true; addView(root) })
     }
