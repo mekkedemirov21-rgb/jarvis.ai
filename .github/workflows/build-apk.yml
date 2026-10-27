@@ -2,7 +2,7 @@ name: Build JARVIS APK
 
 on:
   push:
-    branches: [main, jarvis-galaxy-localhost, ollama-cloud-wakeword]
+    branches: [main, jarvis-galaxy-localhost, ollama-cloud-wakeword, groq-direct-apk]
     paths:
       - 'app/**'
       - 'build.gradle.kts'
