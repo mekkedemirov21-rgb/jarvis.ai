@@ -331,14 +331,14 @@ class MainActivity : Activity() {
                     cloudRequestPending = false; cloudInput?.isEnabled = true
                     appendCloudTranscript("JARVIS: $answer")
                     updateCloudStatus("Verbunden mit Groq · Modell $GROQ_MODEL")
-                    if (speakReply && wakeWordActive) speakWakeText(answer.take(1200))
+                    if (speakReply) speakWakeText(answer.take(1200))
                 }
             } catch (e: Exception) {
                 runOnUiThread {
                     cloudRequestPending = false; cloudInput?.isEnabled = true
                     val msg = e.message?.take(240) ?: "Verbindung zu Groq fehlgeschlagen."
                     appendCloudTranscript("JARVIS: $msg"); updateCloudStatus("Anfrage fehlgeschlagen")
-                    if (speakReply && wakeWordActive) speakWakeText("Entschuldigung, ich konnte gerade nicht antworten. $msg")
+                    if (speakReply) speakWakeText("Entschuldigung, ich konnte gerade nicht antworten. $msg")
                 }
             } finally { try { connection?.disconnect() } catch (_: Exception) {} }
         }.start()
