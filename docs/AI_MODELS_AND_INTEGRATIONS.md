@@ -29,19 +29,33 @@ Ollama listet `gemma3:4b` mit etwa 3,4 GB Download, multimodaler Eingabe und ein
 
 ### Ollama oder LM Studio?
 
-Beide können ein heruntergeladenes Modell lokal ausführen. LM Studio dokumentiert Offline-Inferenz und einen OpenAI-kompatiblen lokalen Server; dafür muss ein Modell geladen und der lokale API-Server gestartet werden. JARVIS unterstützt jetzt beide lokalen Provider:
+Beide können ein heruntergeladenes Modell lokal ausführen. LM Studio dokumentiert Offline-Inferenz und einen OpenAI-kompatiblen lokalen Server; dafür muss ein Modell geladen und der lokale API-Server gestartet werden. JARVIS unterstützt beide lokalen Provider und optional Groq als Cloud-Anbieter:
 
 | Einstellung | Ollama (Standard) | LM Studio |
 |---|---|---|
-| `JARVIS_LLM_PROVIDER` | `ollama` | `lmstudio` |
+| `JARVIS_LLM_PROVIDER` | `ollama` | `lmstudio` | `groq` (Cloud) |
 | Standard-URL | `http://127.0.0.1:11434` | `http://127.0.0.1:1234/v1` |
 | Modellkennung | z. B. `qwen3.5:4b` | exakte Modellkennung des lokalen LM-Studio-Servers |
-| Kosten für Inferenz | keine API-Gebühr; eigene Hardware/Stromkosten | keine API-Gebühr; eigene Hardware/Stromkosten |
-| Internet nach Download | für lokale Inferenz nicht nötig | für lokale Inferenz nicht nötig |
+| Kosten für Inferenz | keine API-Gebühr; eigene Hardware/Stromkosten | keine API-Gebühr; eigene Hardware/Stromkosten | kostenloses Kontingent mit Limits; Bedingungen können sich ändern |
+| Internet nach Download | für lokale Inferenz nicht nötig | für lokale Inferenz nicht nötig | immer nötig; Prompts werden an Groq gesendet |
 
-Konfiguriere `JARVIS_LLM_PROVIDER`, `JARVIS_LLM_MODEL` und gegebenenfalls `LMSTUDIO_BASE_URL` in deiner **lokalen, ignorierten** `.env`. Die Adapter-Implementierung blockiert Nicht-Loopback-Ziele; JARVIS soll keine privaten E-Mail- oder CV-Inhalte an eine frei eingetragene Cloud-URL senden. Nach Änderung der Einstellungen den lokalen Companion neu starten.
+Konfiguriere `JARVIS_LLM_PROVIDER`, `JARVIS_LLM_MODEL` und gegebenenfalls `LMSTUDIO_BASE_URL` in deiner **lokalen, ignorierten** `.env`. Ollama/LM Studio sind auf Loopback begrenzt. Für Groq ist ausschließlich `https://api.groq.com/openai/v1` fest hinterlegt; die API-Nutzung schickt Prompts und relevanten Kontext an Groq. Verwende für besonders private E-Mails oder Lebensläufe lieber ein lokales Modell, sofern das Gerät es bewältigt. Nach Änderung den Companion neu starten.
 
 Wenn du ein OpenAI-Modell über den OpenAI-API-Dienst einbinden willst: ChatGPT-Nutzung und API-Abrechnung sind getrennte Produkte; eine ChatGPT-Free-Nutzung liefert nicht automatisch einen kostenlosen API-Endpunkt für deine eigene App. Das ist der Grund, warum JARVIS standardmäßig kein OpenAI-API-Konto benötigt.
+
+## Groq als Cloud-Anbieter (optional)
+
+Für den Galaxy-Start kann Groq die Inferenz übernehmen, sodass das Telefon kein lokales Modell herunterladen und kompilieren muss:
+
+```env
+JARVIS_LLM_PROVIDER=groq
+JARVIS_LLM_MODEL=openai/gpt-oss-20b
+GROQ_API_KEY=dein_privater_schluessel
+```
+
+Erzeuge den Schlüssel in [Groq Console](https://console.groq.com/keys). Speichere ihn nur in der lokalen, von Git ignorierten `.env`; nie im Quellcode, in Screenshots oder in diesem Chat. Groq stellt eine OpenAI-kompatible Chat-Completions-API bereit. Verfügbare Modelle und Limits können sich ändern; siehe [Modellübersicht](https://console.groq.com/docs/models) und [Rate Limits](https://console.groq.com/docs/rate-limits). Das kostenlose Kontingent ist limitiert, kein Anspruch auf unbegrenzte Nutzung.
+
+**Datenschutz:** In diesem Modus werden deine Chat-Nachrichten sowie der für die jeweilige Aufgabe ausgewählte Kontext über HTTPS an Groq übertragen und dort verarbeitet. Die JARVIS-API speichert Chat-Prompts nicht absichtlich, das verhindert aber nicht die Verarbeitung bei Groq. OAuth-Daten, E-Mails oder CVs sollten nicht mit Groq geteilt werden, solange du nicht die aktuellen Bedingungen von Groq geprüft hast. Die Schlüsseldatei gehört nicht ins öffentliche Repository.
 
 ## 2. Gedächtnis wie Obsidian
 
