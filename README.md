@@ -5,7 +5,7 @@ JARVIS is a privacy-oriented personal assistant with an Android client and a loc
 ## What is implemented today
 
 - **Android client:** connects to the private companion over HTTPS; the API token is encrypted with Android Keystore and inserted into the dashboard session. It can show neutral Android notifications for new queued job/mail hints and due reminders (WorkManager polling, not real-time push).
-- **Local AI:** supports Ollama or LM Studio loopback APIs. Default is Qwen3.5 4B through Ollama. Prompts are not intentionally persisted by the API and the model has no tools or direct authority to act.
+- **AI providers:** supports local Ollama/LM Studio and an explicit optional Groq cloud API provider. For Groq, chat prompts and relevant context are transmitted to Groq over HTTPS; use local Ollama/LM Studio when privacy requires inference to stay on-device/on your own computer. The API does not intentionally persist prompts, and the model has no tools or direct authority to act.
 - **Gmail and Google Calendar:** optional official OAuth connector, read-only by default; opt-in Gmail draft/send and Calendar create/update are available through the two-step approval queue after fresh write-scope consent. Optional background triage can notify about a likely job offer, rejection, interview or application update.
 - **Job search:** optional Adzuna personal-search API (free/evaluation tier subject to provider limits/terms) plus normal links to Indeed, Bundesagentur für Arbeit, and LinkedIn. The Jobs tab can save encrypted watch profiles, display monitor status and show ranked job alerts; the local model explains fit and missing requirements, then you decide whether to apply.
 - **Application preparation:** evaluates fit and missing qualifications. Automatic application submission is not implemented; Indeed is not scraped and its site is not automated.
@@ -17,7 +17,7 @@ For detailed model comparisons, setup choices, providers and the current feature
 
 ## Run JARVIS directly on an Android phone (experimental)
 
-The Android APK can run against a local companion in Termux on the same phone. See [Galaxy local setup](docs/GALAXY_LOCAL_SETUP.md). In this mode, the APK allows HTTP only to `127.0.0.1`; all non-loopback server connections still require HTTPS. The small Qwen3.5 0.8B model is a low-resource starting point and is much less capable than a larger PC model.
+The Android APK can run against a companion API in Termux on the same phone. See [Galaxy setup](docs/GALAXY_LOCAL_SETUP.md). In this mode, the APK allows HTTP only to `127.0.0.1`; all non-loopback server connections still require HTTPS. The Termux setup defaults to Groq cloud inference to avoid downloading/building a local model on the phone. For a fully local alternative, the scripts in this branch can still start the small Qwen3.5 0.8B model, but phone resource and Android background limits apply.
 
 ## Recommended free local model
 
@@ -29,7 +29,9 @@ ollama pull qwen3.5:4b
 
 It uses your own computer rather than paying for a hosted inference API. A larger 9B model can be tested if the machine has enough memory. The 4B model is useful for general chat, summarization, simple JSON triage and job comparison, but can still make mistakes. Benchmark it on your own representative cases before trusting important recommendations.
 
-LM Studio is another supported local provider. Configure `JARVIS_LLM_PROVIDER=lmstudio`, use its local OpenAI-compatible server at `http://127.0.0.1:1234/v1`, and set `JARVIS_LLM_MODEL` to the model identifier exposed by the LM Studio server. Never configure a public/cloud endpoint for personal mail or CV content.
+LM Studio is another supported local provider. Configure `JARVIS_LLM_PROVIDER=lmstudio`, use its local OpenAI-compatible server at `http://127.0.0.1:1234/v1`, and set `JARVIS_LLM_MODEL` to the model identifier exposed by the LM Studio server.
+
+For Groq cloud inference, set `JARVIS_LLM_PROVIDER=groq`, `JARVIS_LLM_MODEL=openai/gpt-oss-20b`, and a private `GROQ_API_KEY` in your local `.env`. Groq has usage/rate limits; chat prompts leave your device and are processed by Groq. Never commit a real API key.
 
 ## Run the local companion on your computer
 
