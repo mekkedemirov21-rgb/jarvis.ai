@@ -1,6 +1,6 @@
 # JARVIS Architecture and implementation status
 
-**Stand: 26. Oktober 2026.** The project is a local-first foundation with a working Android client and local companion. It is not yet a fully autonomous agent, and security has not been externally audited.
+**Stand: 26. Oktober 2026.** The project is a local-first foundation with a working Android client and companion API. Model inference supports local Ollama/LM Studio or an explicit Groq cloud mode. Groq mode sends prompts to Groq; it is not local-first for inference. It is not yet a fully autonomous agent, and security has not been externally audited.
 
 ## System architecture
 
@@ -16,10 +16,10 @@ Android app
 User-owned PC / home server
   ├─ FastAPI service bound to 127.0.0.1:8765
   ├─ Bearer-token authentication; random secret required at start
-  ├─ local model adapter
-  │    ├─ Ollama /api/chat
-  │    └─ LM Studio OpenAI-compatible /v1/chat/completions
-  │       (the chosen model server must resolve to loopback)
+  ├─ model adapter
+  │    ├─ Ollama /api/chat (loopback only)
+  │    ├─ LM Studio OpenAI-compatible /v1/chat/completions (loopback only)
+  │    └─ optional Groq HTTPS cloud API (prompts leave the device)
   ├─ local SQLite DB
   │    ├─ encrypted proposal payloads / relationship reminders / job-watch profiles
   │    ├─ hashed IDs for monitored messages/listings
@@ -37,7 +37,7 @@ The public repository must contain source only. Never commit `.env`, OAuth clien
 | Feature | Current state | Safety boundary |
 |---|---|---|
 | Android companion client | Implemented; requires reachable HTTPS endpoint | No insecure HTTP, no embedded API secret; API token is Android-Keystore encrypted |
-| Local AI chat | Implemented for Ollama and LM Studio | No model tools; prompt/reply not intentionally persisted by the API |
+| AI chat | Implemented for Ollama, LM Studio, and opt-in Groq | No model tools; prompt/reply not intentionally persisted by JARVIS API; Groq processes prompts in its cloud |
 | Memory | Obsidian-compatible local Markdown notes plus keyword-retrieval into chat | Only a few lexically relevant excerpts are inserted; notes remain plaintext on disk |
 | Gmail read | Optional Google OAuth | Read-only `gmail.readonly` scope by default |
 | Calendar read | Optional Google OAuth | Read-only `calendar.events.readonly` scope by default |
@@ -55,7 +55,7 @@ The public repository must contain source only. Never commit `.env`, OAuth clien
 
 ## Model selection
 
-Default: `JARVIS_LLM_PROVIDER=ollama`, `JARVIS_LLM_MODEL=qwen3.5:4b`. As listed by Ollama, the Qwen3.5 4B model download is approximately 3.3–4.0 GB; the 9B variant is approximately 6.6–7.6 GB. Qwen3.5 is the recommended first test for local assistant tasks. Quality depends on RAM/VRAM, quantization, prompt design and language/task. Do not assume a 4B model is always accurate.
+Default on a fresh general setup: `JARVIS_LLM_PROVIDER=ollama`, `JARVIS_LLM_MODEL=qwen3.5:4b`. The Galaxy Termux setup defaults to `JARVIS_LLM_PROVIDER=groq`, `JARVIS_LLM_MODEL=openai/gpt-oss-20b` to avoid phone-side model compilation/download. Groq requires a private `GROQ_API_KEY` and sends prompts to the cloud; usage may be rate-limited. As listed by Ollama, the Qwen3.5 4B model download is approximately 3.3–4.0 GB; the 9B variant is approximately 6.6–7.6 GB. Quality depends on hardware, quantization, prompts and language/task.
 
 Setup:
 
@@ -68,7 +68,7 @@ LM Studio can be used instead:
 - Set `JARVIS_LLM_PROVIDER=lmstudio`.
 - Start LM Studio's local API server at `http://127.0.0.1:1234/v1`.
 - Set `JARVIS_LLM_MODEL` to the exact model identifier exposed by LM Studio.
-- Keep the server bound to loopback and never place an externally hosted endpoint in this local-only adapter.
+- Keep Ollama/LM Studio bound to loopback. Groq is the sole supported cloud provider and uses a fixed HTTPS endpoint; prompts sent to Groq leave the device.
 
 The central adapter normalizes chat and JSON-mode responses for chat, job review, email classification and scheduled job-matching. Tests exercise both provider request shapes without contacting either server.
 
