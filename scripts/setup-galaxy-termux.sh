@@ -11,7 +11,7 @@ fi
 
 echo "Updating Termux packages and installing the local runtime..."
 pkg update -y
-pkg install -y git python python-pip python-cryptography llama-cpp rust clang pkg-config libffi openssl
+pkg install -y git python python-pip python-cryptography rust clang pkg-config libffi openssl nano
 
 # Pydantic may need an Android-specific native extension build; keep it to two jobs
 # to reduce memory pressure on a phone. No uvloop/httptools extras are requested.
@@ -60,9 +60,8 @@ generated_if_placeholder(
 )
 
 values.update({
-    "JARVIS_LLM_PROVIDER": "lmstudio",
-    "JARVIS_LLM_MODEL": "ggml-org/Qwen3.5-0.8B-GGUF:Q4_0",
-    "LMSTUDIO_BASE_URL": "http://127.0.0.1:8080/v1",
+    "JARVIS_LLM_PROVIDER": "groq",
+    "JARVIS_LLM_MODEL": "openai/gpt-oss-20b",
     "JARVIS_HOST": "127.0.0.1",
     "JARVIS_PORT": "8765",
     "JARVIS_DATA_DIR": "./backend/data",
@@ -95,11 +94,12 @@ chmod 600 .env
 mkdir -p backend/data/vault .secrets
 
 echo
-echo "Setup finished."
-echo "Next: start a second Termux session and run:"
-echo "  bash scripts/start-galaxy-model.sh"
-echo "Wait for the model server to start, then open another session and run:"
-echo "  bash scripts/start-galaxy-backend.sh"
-echo "To copy the API token into the JARVIS APK, display it privately with:"
-echo "  grep '^JARVIS_API_TOKEN=' .env"
-echo "Keep the token private. Both services bind to 127.0.0.1 only."
+echo "Setup finished. Groq cloud inference selected; no local model download is needed."
+echo "1. Create a Groq API key at https://console.groq.com/keys"
+echo "2. Add it privately to .env with: nano .env"
+echo "   Set GROQ_API_KEY=your_key and keep the key out of chat/screenshots/GitHub."
+echo "   Save in nano with Ctrl+O, Enter; exit with Ctrl+X."
+echo "3. Start JARVIS: bash scripts/start-galaxy-backend.sh"
+echo "4. To copy the separate JARVIS companion token, display it locally with:"
+echo "   grep '^JARVIS_API_TOKEN=' .env"
+echo "Never share either key. The backend listens only on 127.0.0.1; Groq receives chat prompts for inference."
