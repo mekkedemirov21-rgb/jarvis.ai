@@ -9,7 +9,7 @@ if ! command -v pkg >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "Updating Termux packages and installing the local runtime..."
+echo "Updating Termux packages and installing the JARVIS API runtime..."
 pkg update -y
 pkg install -y git python python-pip python-cryptography rust clang pkg-config libffi openssl nano
 
@@ -32,8 +32,8 @@ if [ ! -f .env ]; then
   cp .env.example .env
 fi
 
-# Generate secrets locally and configure a small, on-device llama.cpp model.
-# This edits only this Termux checkout's ignored .env; no secrets go to Git.
+# Generate local companion secrets and select Groq cloud inference.
+# The Groq key remains user-supplied in this Termux checkout's ignored .env; no secrets go to Git.
 .venv/bin/python - <<'PY'
 from pathlib import Path
 import base64
@@ -54,6 +54,7 @@ def generated_if_placeholder(key, value):
         values[key] = value
 
 generated_if_placeholder("JARVIS_API_TOKEN", secrets.token_urlsafe(48))
+values.setdefault("GROQ_API_KEY", "")
 generated_if_placeholder(
     "JARVIS_DATA_KEY",
     base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("ascii"),
