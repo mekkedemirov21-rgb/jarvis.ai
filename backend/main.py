@@ -37,7 +37,7 @@ app = FastAPI(
     title=APP_NAME,
     version="0.1.0",
     description=(
-        "Local-first assistant. Prompts are sent only to a loopback Ollama or LM Studio server. "
+        "JARVIS assistant. Ollama/LM Studio prompts stay on loopback; when the explicit Groq provider is selected, prompts and relevant context are sent to Groq cloud over HTTPS. "
         "Google email/calendar writes are disabled by default and require explicit OAuth opt-in, a proposal, approval and a separate execute request. "
         "Job applications remain manual; private WhatsApp chat history is not accessed."
     ),
@@ -115,7 +115,7 @@ class Decision(BaseModel):
 @app.get("/health")
 async def health() -> dict:
     """Minimal readiness endpoint; deliberately does not disclose machine or account details."""
-    return {"status": "ok", "service": APP_NAME, "model": MODEL, "provider": LLM_PROVIDER, "mode": "local-only"}
+    return {"status": "ok", "service": APP_NAME, "model": MODEL, "provider": LLM_PROVIDER, "mode": provider_status()["mode"]}
 
 
 @app.get("/api/integrations/status", dependencies=[Depends(require_api_token)])
@@ -123,7 +123,7 @@ async def integration_status() -> dict:
     google_writes_enabled = os.getenv("JARVIS_ENABLE_GOOGLE_WRITES", "false").strip().lower() in {"1", "true", "yes", "on"}
     google_connected = (DATA_DIR / "google-token.enc").is_file()
     return {
-        "llm": {"status": "configured-local", **provider_status()},
+        "llm": {"status": "configured", **provider_status()},
         "memory": {"status": "local-markdown-vault", "format": "Obsidian-compatible Markdown"},
         "approvals": {"status": "two-step-review-and-execution", "payloadEncryption": "AES-256-GCM", "approvalWindowSeconds": 900},
         "emailMonitor": {
@@ -236,7 +236,7 @@ def retrieve_memory_context(messages: list[dict[str, str]], *, max_notes: int = 
 
 @app.post("/api/chat", dependencies=[Depends(require_api_token)])
 async def chat(request: ChatRequest) -> dict:
-    """Run a non-persistent conversation with the configured local model; no tools/actions are exposed."""
+    """Run a non-persistent conversation with the configured provider; no tools/actions are exposed."""
     messages = [
         {
             "role": "system",
@@ -267,11 +267,11 @@ async def chat(request: ChatRequest) -> dict:
     try:
         content = await chat_async(messages, timeout=120.0)
     except LocalModelUnavailable as exc:
-        raise HTTPException(status_code=503, detail="The selected local model server is not available.") from exc
+        raise HTTPException(status_code=503, detail="The selected model provider is not available or is not configured.") from exc
     except LocalModelTimeout as exc:
-        raise HTTPException(status_code=504, detail="The local model timed out.") from exc
+        raise HTTPException(status_code=504, detail="The selected model provider timed out.") from exc
     except LocalModelError as exc:
-        raise HTTPException(status_code=502, detail="The local model returned an error.") from exc
+        raise HTTPException(status_code=502, detail="The selected model provider returned an error.") from exc
     # Deliberately don't write prompts or completions to API logs/database.
     return {"reply": content, "model": MODEL, "provider": LLM_PROVIDER, "stored": False, "toolsEnabled": False}
 
