@@ -11,9 +11,14 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.Typeface
+import android.view.View
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.provider.CalendarContract
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -180,13 +185,37 @@ class MainActivity : Activity() {
             setPadding(dp(12), dp(8), dp(12), dp(8))
             setBackgroundColor(Color.rgb(5, 8, 12))
         }
-        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
-        header.addView(label("JARVIS", 22f, Color.rgb(235, 246, 255), true), LinearLayout.LayoutParams(0, dp(48), 1f))
-        header.addView(button("API-Key") { showGroqSetup() }, LinearLayout.LayoutParams(-2, dp(42)))
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+        header.addView(label("J A R V I S", 21f, Color.rgb(235, 246, 255), true), LinearLayout.LayoutParams(0, dp(48), 1f))
+        header.addView(label("● ONLINE", 10f, Color.rgb(93, 220, 176), true).apply {
+            setPadding(0, 0, dp(10), 0)
+        })
+        header.addView(button("API-Key") { showGroqSetup() }, LinearLayout.LayoutParams(-2, dp(40)))
         root.addView(header)
-        root.addView(label("Groq-KI · Internet erforderlich · Nachrichten werden an Groq übermittelt. Keine Tools oder automatischen Aktionen sind in diesem Chat aktiv.",
-            10f, Color.rgb(178, 151, 111)).apply { setPadding(dp(2), 0, dp(2), dp(8)) })
-        val transcriptScroll = ScrollView(this).apply { setBackgroundColor(Color.rgb(7, 13, 20)); isFillViewport = false }
+
+        val core = JarvisCoreView(this).apply { contentDescription = "Animierter JARVIS-Kern" }
+        root.addView(core, LinearLayout.LayoutParams(-1, dp(168)).apply {
+            topMargin = dp(1); bottomMargin = dp(2)
+        })
+        root.addView(label("J.A.R.V.I.S. CORE  /  GROQ LINK  /  LOCAL TOOLS",
+            9f, Color.rgb(103, 180, 222), true).apply {
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, 0, 0, dp(5))
+            letterSpacing = 0.08f
+        })
+        root.addView(label("Chat läuft über Groq. Die Tool-Kacheln öffnen Apps oder starten Systemdialoge; E-Mail-Inhalte und WhatsApp-Nachrichten werden nicht ohne separate Freigabe ausgelesen.",
+            10f, Color.rgb(141, 161, 179)).apply { setPadding(dp(2), 0, dp(2), dp(7)) })
+        val transcriptScroll = ScrollView(this).apply {
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(7, 13, 20))
+                cornerRadius = dp(12).toFloat()
+                setStroke(dp(1), Color.rgb(26, 48, 65))
+            }
+            isFillViewport = false
+        }
         val transcriptView = label("JARVIS: Ich bin bereit. Schreib mir eine Nachricht oder aktiviere die Spracheingabe, solange die App geöffnet ist.",
             14f, Color.rgb(225, 238, 249)).apply { setPadding(dp(12), dp(12), dp(12), dp(12)) }
         cloudScroll = transcriptScroll; cloudTranscript = transcriptView
@@ -203,16 +232,27 @@ class MainActivity : Activity() {
         root.addView(promptInput, LinearLayout.LayoutParams(-1, -2))
         root.addView(button("Senden") {
             val prompt = cloudInput?.text?.toString()?.trim().orEmpty()
-            if (prompt.isNotBlank()) { cloudInput?.setText(""); sendGroqPrompt(prompt, false) }
+            if (prompt.isNotBlank()) { cloudInput?.setText(""); sendGroqPrompt(prompt, groqPrefs.getBoolean("speak_replies", true)) }
         }, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(5) })
+        root.addView(label("VERBUNDENE APP-TOOLS", 9f, Color.rgb(103, 180, 222), true).apply {
+            setPadding(dp(2), dp(8), dp(2), dp(4)); letterSpacing = 0.08f
+        })
+        val toolsRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        toolsRow.addView(button("▦ Kalender") { openCalendarTool() }, LinearLayout.LayoutParams(0, dp(43), 1f).apply { rightMargin = dp(4) })
+        toolsRow.addView(button("✉ E-Mail") { openEmailTool() }, LinearLayout.LayoutParams(0, dp(43), 1f).apply { leftMargin = dp(2); rightMargin = dp(2) })
+        toolsRow.addView(button("◉ WhatsApp") { openWhatsAppTool() }, LinearLayout.LayoutParams(0, dp(43), 1f).apply { leftMargin = dp(4) })
+        root.addView(toolsRow)
+
         val voiceRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        voiceRow.addView(button("„Jarvis“ aktivieren") { startWakeWordListening() }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(4) })
-        voiceRow.addView(button("Mikrofon stoppen") { stopWakeWordListening(disablePreference = true) }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(4) })
+        voiceRow.addView(button("„Jarvis“ aktivieren") { startWakeWordListening() }, LinearLayout.LayoutParams(0, dp(45), 1f).apply { rightMargin = dp(4) })
+        voiceRow.addView(button("Stimme / Audio") { showVoiceSettings() }, LinearLayout.LayoutParams(0, dp(45), 1f).apply { leftMargin = dp(4); rightMargin = dp(4) })
+        voiceRow.addView(button("Stopp") { stopWakeWordListening(disablePreference = true); textToSpeech?.stop() }, LinearLayout.LayoutParams(0, dp(45), 0.65f).apply { leftMargin = dp(4) })
         root.addView(voiceRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
-        cloudStatus = label("Wakeword aus. Zum Sprachtest die Erkennung aktivieren.", 10f, Color.rgb(135, 158, 178))
-            .apply { setPadding(dp(2), dp(4), dp(2), dp(3)) }
+        cloudStatus = label("VOICE READY · Wakeword aus. App für Sprachsteuerung geöffnet lassen.", 10f, Color.rgb(135, 158, 178))
+            .apply { setPadding(dp(2), dp(5), dp(2), dp(3)) }
         root.addView(cloudStatus)
         setContentView(root)
+        ensureTextToSpeech()
         autoStartWakeWordIfEnabled()
     }
 
@@ -243,6 +283,7 @@ class MainActivity : Activity() {
     }
 
     private fun sendGroqPrompt(prompt: String, speakReply: Boolean) {
+        if (handleLocalToolCommand(prompt)) return
         if (cloudRequestPending) { Toast.makeText(this, "Eine JARVIS-Anfrage läuft bereits.", Toast.LENGTH_SHORT).show(); return }
         if (prompt.length > 4000) { Toast.makeText(this, "Bitte kürze deine Nachricht auf 4.000 Zeichen.", Toast.LENGTH_LONG).show(); return }
         val key = GroqKeyVault.read(this)
@@ -251,7 +292,7 @@ class MainActivity : Activity() {
         cloudMessages.add(JSONObject().put("role", "user").put("content", prompt))
         val requestMessages = JSONArray()
         requestMessages.put(JSONObject().put("role", "system").put("content",
-            "Du bist JARVIS, ein freundlicher, ruhiger, intelligenter persönlicher Assistent. Antworte auf Deutsch, wenn der Nutzer Deutsch spricht. Erkläre anfängerfreundlich. Behaupte nie, Geräte gesteuert, Nachrichten versendet oder Dateien verändert zu haben, wenn du das nicht tatsächlich getan hast. Du hast in dieser App keinen Zugriff auf Apps, Dateien, E-Mail oder Kalender. Erfinde keine Aktionen oder Fakten. Frage vor wichtigen oder irreversiblen Aktionen nach Bestätigung."))
+            "Du bist JARVIS: ein ruhiger, souveräner, präziser Assistent mit futuristischem Ton. Antworte auf Deutsch, wenn der Nutzer Deutsch spricht. Erkläre anfängerfreundlich. Diese Android-App hat lokale Schnellaktionen zum Öffnen von Kalender, E-Mail und WhatsApp; das Öffnen erfolgt nur bei ausdrücklichem Nutzerwunsch. Ein Kalendereintrag wird über einen Android-Systemdialog vorbereitet und muss vom Nutzer abgeschlossen werden. Du kannst keine E-Mail-Inhalte oder WhatsApp-Nachrichten lesen, nicht selbst Nachrichten senden, keine Termine im Hintergrund speichern und keine Apps fernsteuern. Behaupte nie, etwas ausgeführt zu haben, wenn es nicht tatsächlich ausgeführt wurde. Erfinde keine Aktionen oder Fakten. Frage vor wichtigen oder irreversiblen Aktionen nach Bestätigung."))
         cloudMessages.takeLast(10).forEach { requestMessages.put(it) }
         appendCloudTranscript("Du: $prompt")
         updateCloudStatus("JARVIS denkt …")
@@ -303,7 +344,149 @@ class MainActivity : Activity() {
         }.start()
     }
 
-        private fun updateCloudStatus(text: String) {
+    private fun applyJarvisVoicePreset() {
+        val pitch = groqPrefs.getFloat("voice_pitch", 0.82f)
+        val rate = groqPrefs.getFloat("voice_rate", 0.90f)
+        textToSpeech?.setPitch(pitch.coerceIn(0.65f, 1.25f))
+        textToSpeech?.setSpeechRate(rate.coerceIn(0.70f, 1.15f))
+    }
+
+    private fun showVoiceSettings() {
+        ensureTextToSpeech()
+        val choices = arrayOf(
+            "JARVIS · Tief & ruhig (empfohlen)",
+            "Natürlich · Standardtempo",
+            "Deutsche Systemstimme auswählen",
+            if (groqPrefs.getBoolean("speak_replies", true)) "Antworten vorlesen: EIN" else "Antworten vorlesen: AUS",
+            "Stimme testen"
+        )
+        AlertDialog.Builder(this).setTitle("JARVIS · Sprachsystem").setItems(choices) { _, which ->
+            when (which) {
+                0 -> {
+                    groqPrefs.edit().putFloat("voice_pitch", 0.82f).putFloat("voice_rate", 0.90f).apply()
+                    applyJarvisVoicePreset()
+                    speakWakeText("System bereit. Ich bin JARVIS. Wie kann ich helfen?")
+                }
+                1 -> {
+                    groqPrefs.edit().putFloat("voice_pitch", 1.0f).putFloat("voice_rate", 1.0f).apply()
+                    applyJarvisVoicePreset()
+                    speakWakeText("Hallo. Die natürliche Sprachausgabe ist aktiv.")
+                }
+                2 -> showInstalledGermanVoices()
+                3 -> {
+                    val enabled = !groqPrefs.getBoolean("speak_replies", true)
+                    groqPrefs.edit().putBoolean("speak_replies", enabled).apply()
+                    Toast.makeText(this, if (enabled) "Sprachausgabe eingeschaltet." else "Sprachausgabe ausgeschaltet.", Toast.LENGTH_SHORT).show()
+                    if (enabled) speakWakeText("Sprachausgabe aktiviert.")
+                }
+                4 -> speakWakeText("Systemdiagnose abgeschlossen. JARVIS ist startklar und wartet auf deine Anweisung.")
+            }
+        }.setNegativeButton("Schließen", null).show()
+    }
+
+    private fun showInstalledGermanVoices() {
+        val engine = textToSpeech
+        if (engine == null) {
+            Toast.makeText(this, "Sprachsystem wird initialisiert. Bitte erneut versuchen.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val voices = engine.voices?.filter { it.locale.language == "de" }?.sortedBy { it.name } ?: emptyList()
+        if (voices.isEmpty()) {
+            Toast.makeText(this, "Keine deutsche Systemstimme gefunden. Installiere eine deutsche Stimme in den Android-Sprachoptionen.", Toast.LENGTH_LONG).show()
+            try { startActivity(Intent("com.android.settings.TTS_SETTINGS")) } catch (_: Exception) {}
+            return
+        }
+        val names = voices.map { voice -> voice.name + if (voice.isNetworkConnectionRequired) " · online" else " · lokal" }.toTypedArray()
+        AlertDialog.Builder(this).setTitle("Deutsche Stimme wählen").setItems(names) { _, which ->
+            try {
+                engine.voice = voices[which]
+                groqPrefs.edit().putString("voice_name", voices[which].name).apply()
+                Toast.makeText(this, "Stimme ausgewählt: ${voices[which].name}", Toast.LENGTH_SHORT).show()
+                speakWakeText("Stimme aktiviert. JARVIS ist startklar.")
+            } catch (_: Exception) {
+                Toast.makeText(this, "Diese Systemstimme konnte nicht aktiviert werden.", Toast.LENGTH_LONG).show()
+            }
+        }.setNegativeButton("Abbrechen", null).show()
+    }
+
+    private fun openCalendarTool() {
+        try {
+            startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_CALENDAR))
+            appendCloudTranscript("JARVIS · TOOL: Kalender geöffnet.")
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Intent.ACTION_INSERT).setData(CalendarContract.Events.CONTENT_URI))
+                appendCloudTranscript("JARVIS · TOOL: Kalender-Systemdialog geöffnet.")
+            } catch (_: Exception) {
+                Toast.makeText(this, "Keine Kalender-App verfügbar. Installiere oder aktiviere eine Kalender-App.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun openEmailTool() {
+        try {
+            startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:")))
+            appendCloudTranscript("JARVIS · TOOL: E-Mail-App zum Verfassen geöffnet. Noch nichts wurde gesendet.")
+        } catch (_: Exception) {
+            Toast.makeText(this, "Keine E-Mail-App verfügbar. Richte zuerst eine Mail-App ein.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun openWhatsAppTool() {
+        try {
+            val intent = packageManager.getLaunchIntentForPackage("com.whatsapp")
+                ?: packageManager.getLaunchIntentForPackage("com.whatsapp.w4b")
+            if (intent != null) {
+                startActivity(intent)
+                appendCloudTranscript("JARVIS · TOOL: WhatsApp geöffnet. Es wurde keine Nachricht gesendet.")
+            } else {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/")))
+                appendCloudTranscript("JARVIS · TOOL: WhatsApp-Webseite geöffnet. Es wurde keine Nachricht gesendet.")
+            }
+        } catch (_: Exception) {
+            Toast.makeText(this, "WhatsApp konnte nicht geöffnet werden.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun handleLocalToolCommand(prompt: String): Boolean {
+        val text = prompt.trim()
+        val lower = text.lowercase(Locale.GERMANY)
+        val opens = listOf("öffne", "oeffne", "starte", "öffnen", "oeffnen", "open", "geh zu", "gehe zu").any { lower.contains(it) }
+        val createsEvent = listOf("erstelle", "erstell", "plane", "trag ein", "trage ein", "hinzufügen", "hinzufuegen").any { lower.contains(it) } &&
+            listOf("termin", "kalendereintrag", "meeting").any { lower.contains(it) }
+        if (createsEvent) {
+            val title = text.substringAfter("termin", text.substringAfter("Kalendereintrag", "Neuer JARVIS-Termin"))
+                .trim().trim(':', '-', ' ')
+                .ifBlank { "Neuer JARVIS-Termin" }.take(100)
+            AlertDialog.Builder(this)
+                .setTitle("Kalendereintrag vorbereiten?")
+                .setMessage("Ich öffne jetzt den Kalender mit dem Titel „$title“. Bitte prüfe Datum und Uhrzeit und speichere den Termin selbst.")
+                .setNegativeButton("Abbrechen", null)
+                .setPositiveButton("Kalender öffnen") { _, _ ->
+                    try {
+                        startActivity(Intent(Intent.ACTION_INSERT).setData(CalendarContract.Events.CONTENT_URI)
+                            .putExtra(CalendarContract.Events.TITLE, title))
+                    } catch (_: Exception) {
+                        Toast.makeText(this, "Keine kompatible Kalender-App gefunden.", Toast.LENGTH_LONG).show()
+                    }
+                }.show()
+            appendCloudTranscript("JARVIS · TOOL: Kalendereintrag vorbereitet; Speichern bleibt deine Entscheidung.")
+            updateCloudStatus("Lokales Tool · Kalender")
+            return true
+        }
+        if (opens && lower.contains("whatsapp")) {
+            openWhatsAppTool(); updateCloudStatus("Lokales Tool · WhatsApp"); return true
+        }
+        if (opens && (lower.contains("e-mail") || lower.contains("email") || lower.contains("mail"))) {
+            openEmailTool(); updateCloudStatus("Lokales Tool · E-Mail"); return true
+        }
+        if (opens && (lower.contains("kalender") || lower.contains("calendar"))) {
+            openCalendarTool(); updateCloudStatus("Lokales Tool · Kalender"); return true
+        }
+        return false
+    }
+
+    private fun updateCloudStatus(text: String) {
         runOnUiThread { cloudStatus?.text = text }
     }
 
@@ -361,6 +544,11 @@ class MainActivity : Activity() {
         textToSpeech = TextToSpeech(this) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 textToSpeech?.setLanguage(Locale.GERMANY)
+                applyJarvisVoicePreset()
+                val preferredVoice = groqPrefs.getString("voice_name", null)
+                if (!preferredVoice.isNullOrBlank()) {
+                    textToSpeech?.voices?.firstOrNull { it.name == preferredVoice }?.let { textToSpeech?.voice = it }
+                }
                 textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {}
                     override fun onDone(utteranceId: String?) {
