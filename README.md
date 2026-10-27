@@ -15,13 +15,17 @@ JARVIS is a privacy-oriented personal assistant with an Android client and a loc
 
 For detailed model comparisons, setup choices, providers and the current feature boundary, read [AI Models and Integrations](docs/AI_MODELS_AND_INTEGRATIONS.md), [Architecture](docs/ARCHITECTURE.md), [Product Specification](docs/PRODUCT_SPEC.md), and [Security](docs/SECURITY.md).
 
-## Ollama Cloud chat and „Jarvis“-Wakeword in Android
+## Use JARVIS directly on your Galaxy with Groq
 
-The Android app has an experimental direct Ollama Cloud chat path and a foreground-only on-device wake word. It stores the API key encrypted with Android Keystore. Ollama Free has limited monthly starter usage, not unlimited free API calls; see [Ollama Cloud Android guide](docs/OLLAMA_CLOUD_ANDROID.md) before use. Prompts are sent to Ollama Cloud, which states they are not used for training or logged, but are still processed in the cloud.
+The `groq-direct-apk` Android build asks only for a Groq API key. No Termux, companion server, laptop, or terminal commands are required. The key is encrypted at rest with Android Keystore; the APK calls Groq's HTTPS chat-completions API directly using `openai/gpt-oss-20b`.
 
-## Run JARVIS directly on an Android phone (experimental)
+1. Install the latest successful `JARVIS-debug-APK` artifact from the [Groq-direct build workflow](https://github.com/mekkedemirov21-rgb/jarvis.ai/actions/workflows/build-apk.yml?query=branch%3Agroq-direct-apk).
+2. Open JARVIS, create a key at [Groq Console](https://console.groq.com/keys), paste it into the app, and tap **Key speichern und JARVIS starten**.
+3. Chat or use the optional foreground voice controls. The wake-word is not guaranteed to listen while the app is closed or the phone is locked.
 
-The Android APK can run against a local companion in Termux on the same phone. See [Galaxy local setup](docs/GALAXY_LOCAL_SETUP.md). In this mode, the APK allows HTTP only to `127.0.0.1`; all non-loopback server connections still require HTTPS. The small Qwen3.5 0.8B model is a low-resource starting point and is much less capable than a larger PC model.
+**Cloud privacy and costs:** chat text is sent directly to Groq. The API key is stored encrypted on the device, but any entered mobile API key can be used by software running on that device. Groq's available models, quotas and pricing can change. Check your Groq account's plan and billing status before sending messages; this APK does not enforce account-level spend limits and never makes payments itself. Do not send passwords or highly confidential data in this cloud mode.
+
+
 
 ## Recommended free local model
 
